@@ -1,121 +1,34 @@
-import { exec } from "child_process"
-import ffmpeg from "fluent-ffmpeg"
-import path from "path"
-import fs from "fs"
-import { v4 as uuidv4 } from "uuid"
-import { promisify } from "util"
+import { exec } from "child_process";
+import ffmpeg from "fluent-ffmpeg";
+import path from "path";
+import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
+import { promisify } from "util";
 
-const execAsync = promisify(exec)
+const execAsync = promisify(exec);
 
 class VideoService {
   constructor() {
-    this.uploadDir = path.join(process.cwd(), "uploads")
-    this.outputDir = path.join(process.cwd(), "output")
-    this.tempDir = path.join(process.cwd(), "temp")
+    this.uploadDir = path.join(process.cwd(), "uploads");
+    this.outputDir = path.join(process.cwd(), "output");
+    this.tempDir = path.join(process.cwd(), "temp");
 
-    // Set FFmpeg path explicitly for Windows
-    this.setupFFmpeg()
+    this.setupFFmpeg();
   }
 
   setupFFmpeg() {
-    // Try to set FFmpeg path explicitly
-    const possibleFFmpegPaths = [
-      "C:\\Program Files (x86)\\ffmpeg-2025-05-21-git-4099d53759-full_build\\bin\\ffmpeg.exe",
-      "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
-      "ffmpeg", // Fallback to PATH
-    ]
-
-    const possibleFFprobePaths = [
-      "C:\\Program Files (x86)\\ffmpeg-2025-05-21-git-4099d53759-full_build\\bin\\ffprobe.exe",
-      "C:\\Program Files\\ffmpeg\\bin\\ffprobe.exe",
-      "ffprobe", // Fallback to PATH
-    ]
-
-    // Try to find working FFmpeg path
-    for (const ffmpegPath of possibleFFmpegPaths) {
-      try {
-        if (ffmpegPath.endsWith(".exe") && fs.existsSync(ffmpegPath)) {
-          ffmpeg.setFfmpegPath(ffmpegPath)
-          console.log(`✅ FFmpeg path set to: ${ffmpegPath}`)
-          break
-        } else if (ffmpegPath === "ffmpeg") {
-          ffmpeg.setFfmpegPath(ffmpegPath)
-          console.log(`✅ Using FFmpeg from PATH`)
-          break
-        }
-      } catch (error) {
-        console.log(`⚠️ Failed to set FFmpeg path: ${ffmpegPath}`)
-      }
-    }
-
-    // Try to find working FFprobe path
-    for (const ffprobePath of possibleFFprobePaths) {
-      try {
-        if (ffprobePath.endsWith(".exe") && fs.existsSync(ffprobePath)) {
-          ffmpeg.setFfprobePath(ffprobePath)
-          console.log(`✅ FFprobe path set to: ${ffprobePath}`)
-          break
-        } else if (ffprobePath === "ffprobe") {
-          ffmpeg.setFfprobePath(ffprobePath)
-          console.log(`✅ Using FFprobe from PATH`)
-          break
-        }
-      } catch (error) {
-        console.log(`⚠️ Failed to set FFprobe path: ${ffprobePath}`)
-      }
-    }
+    ffmpeg.setFfmpegPath("ffmpeg");   // ✅ Use system ffmpeg
+    ffmpeg.setFfprobePath("ffprobe"); // ✅ Use system ffprobe
   }
 
   async downloadFromYoutube(youtubeUrl) {
-    const videoId = uuidv4()
-    const videoPath = path.join(this.tempDir, `${videoId}.mp4`)
+    const videoId = uuidv4();
+    const videoPath = path.join(this.tempDir, `${videoId}.mp4`);
+    const command = `yt-dlp -f "best[ext=mp4][height<=720]/best" -o "${videoPath}" "${youtubeUrl}"`;
+    await execAsync(command);
 
-    try {
-      console.log("📥 Downloading YouTube video with yt-dlp...")
-      console.log("🔗 URL:", youtubeUrl)
-      console.log("📁 Output path:", videoPath)
-
-      // Use yt-dlp with proper Windows path handling
-      const command = `yt-dlp --format "best[ext=mp4][height<=720]/best[ext=mp4]/best" --output "${videoPath}" --no-playlist --no-write-info-json --no-write-thumbnail --no-write-description --no-write-annotations "${youtubeUrl}"`
-
-      console.log("🔧 Executing command:", command)
-
-      const { stdout, stderr } = await execAsync(command)
-
-      if (stdout) {
-        console.log("📤 yt-dlp stdout:", stdout)
-      }
-      if (stderr) {
-        console.log("⚠️ yt-dlp stderr:", stderr)
-      }
-
-      // Check if file was created
-      if (!fs.existsSync(videoPath)) {
-        throw new Error("Video file was not created")
-      }
-
-      const stats = fs.statSync(videoPath)
-      const fileSizeInMB = (stats.size / (1024 * 1024)).toFixed(2)
-
-      console.log(`✅ YouTube video downloaded successfully (${fileSizeInMB}MB)`)
-
-      // Get video info
-      const videoInfo = await this.getVideoInfo(videoPath)
-
-      return {
-        videoPath,
-        videoInfo,
-      }
-    } catch (error) {
-      console.error("❌ YouTube download failed:", error)
-
-      // Clean up partial file if it exists
-      if (fs.existsSync(videoPath)) {
-        fs.unlinkSync(videoPath)
-      }
-
-      throw new Error(`Failed to download YouTube video: ${error.message}`)
-    }
+    if (!fs.existsSync(videoPath)) throw new Error("Download failed");
+    return { videoPath, videoInfo: await this.getVideoInfo(videoPath) };
   }
 
   async downloadYoutubeCaptions(youtubeUrl) {
@@ -371,4 +284,4 @@ class VideoService {
   }
 }
 
-export default new VideoService()
+export default new VideoService();

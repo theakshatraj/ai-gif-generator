@@ -1,53 +1,33 @@
-import { exec } from "child_process"
-import path from "path"
-import fs from "fs"
-import { promisify } from "util"
+import { exec } from "child_process";
+import path from "path";
+import fs from "fs";
+import { promisify } from "util";
 
-const execAsync = promisify(exec)
+const execAsync = promisify(exec);
 
 class VideoAnalysisService {
   constructor() {
-    this.ffmpegPath = "C:\\Program Files (x86)\\ffmpeg-2025-05-21-git-4099d53759-full_build\\bin\\ffmpeg.exe"
-    this.tempDir = path.join(process.cwd(), "temp")
+    this.ffmpegPath = "ffmpeg";  // ✅ Use system ffmpeg
+    this.tempDir = path.join(process.cwd(), "temp");
   }
 
-  // Extract frames at regular intervals to analyze video content
   async extractFramesForAnalysis(videoPath, videoDuration) {
-    try {
-      console.log("🖼️ Extracting frames for video analysis...")
+    const frameDir = path.join(this.tempDir, `frames_${Date.now()}`);
+    if (!fs.existsSync(frameDir)) fs.mkdirSync(frameDir, { recursive: true });
 
-      const frameDir = path.join(this.tempDir, `frames_${Date.now()}`)
-      if (!fs.existsSync(frameDir)) {
-        fs.mkdirSync(frameDir, { recursive: true })
-      }
+    const frameInterval = 2;
+    const command = `${this.ffmpegPath} -i "${videoPath}" -vf "fps=1/${frameInterval}" "${frameDir}/frame_%03d.jpg"`;
+    await execAsync(command);
 
-      // Extract 1 frame every 2 seconds
-      const frameInterval = 2
-      const totalFrames = Math.floor(videoDuration / frameInterval)
+    const frames = fs.readdirSync(frameDir)
+      .filter(f => f.endsWith(".jpg"))
+      .map((file, idx) => ({
+        timestamp: idx * frameInterval,
+        path: path.join(frameDir, file),
+        filename: file,
+      }));
 
-      console.log(`📊 Extracting ${totalFrames} frames (1 every ${frameInterval}s)`)
-
-      const command = `"${this.ffmpegPath}" -i "${videoPath}" -vf "fps=1/${frameInterval}" "${frameDir}/frame_%03d.jpg"`
-
-      await execAsync(command, { timeout: 30000 })
-
-      // Get list of extracted frames
-      const frames = fs
-        .readdirSync(frameDir)
-        .filter((file) => file.endsWith(".jpg"))
-        .sort()
-        .map((file, index) => ({
-          timestamp: index * frameInterval,
-          path: path.join(frameDir, file),
-          filename: file,
-        }))
-
-      console.log(`✅ Extracted ${frames.length} frames for analysis`)
-      return { frames, frameDir }
-    } catch (error) {
-      console.error("❌ Frame extraction failed:", error)
-      throw error
-    }
+    return { frames, frameDir };
   }
 
   // Analyze video content using frame extraction and scene detection
@@ -241,4 +221,5 @@ class VideoAnalysisService {
   }
 }
 
-export default new VideoAnalysisService()
+
+export default new VideoAnalysisService();

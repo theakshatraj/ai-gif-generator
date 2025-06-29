@@ -1,0 +1,44 @@
+# Node modules (for frontend React project)
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables / Secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python virtual env
+venv/
+.envrc
+
+# Build output
+dist/
+build/
+
+# Frontend build artifacts
+frontend/build/
+frontend/dist/
+
+# IDE / Editor folders
+.vscode/
+.idea/
+
+# Static generated files (optional, if any)
+*.gif
+*.mp4
+*.webm
+
+# Misc
+*.sqlite3
+*.db
