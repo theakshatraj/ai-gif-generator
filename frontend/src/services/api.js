@@ -1,6 +1,7 @@
 class ApiService {
   constructor() {
-    this.baseURL = "http://localhost:5000/api";
+    // ✅ Use environment variable or fallback to localhost
+    this.baseURL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
   }
 
   // POST: Generate GIFs
@@ -84,7 +85,7 @@ class ApiService {
   // GET: Health check
   async checkHealth() {
     try {
-      const response = await fetch("http://localhost:5000/health");
+      const response = await fetch(`${this.baseURL.replace("/api", "")}/health`);
 
       if (!response.ok) {
         throw new Error("Server health check failed");
