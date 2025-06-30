@@ -141,7 +141,7 @@ export const generateGifs = async (req, res) => {
         endTime: gif.endTime,
         size: gif.size,
         hasCaption: gif.hasCaption,
-        url: `/api/gifs/${gif.id}`,
+        url: `/gifs/${gif.id}`,
       })),
       processingTime: `${processingTime}s`,
       videoInfo,
