@@ -81,7 +81,7 @@ const GifPreview = ({ gifs }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {gifs.map((gif, index) => {
-          const gifUrl = `${BASE_URL}/api${gif.url}`
+          const gifUrl = `${BASE_URL}${gif.url}`
           const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
 
           return (
@@ -248,7 +248,7 @@ const GifPreview = ({ gifs }) => {
           <button
             onClick={() => {
               gifs.forEach((gif, index) => {
-                const gifUrl = `${BASE_URL}/api${gif.url}`
+                const gifUrl = `${BASE_URL}${gif.url}`
                 const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
                 setTimeout(() => downloadGif(gifUrl, filename), index * 500)
               })
