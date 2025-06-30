@@ -2,6 +2,9 @@
 
 import { useState } from "react"
 
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+
+
 const GifPreview = ({ gifs }) => {
   const [loadingStates, setLoadingStates] = useState({})
   const [imageErrors, setImageErrors] = useState({})
@@ -77,7 +80,7 @@ const GifPreview = ({ gifs }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {gifs.map((gif, index) => {
-          const gifUrl = `http://localhost:5000${gif.url}`
+          const gifUrl = `${BASE_URL}${gif.url}`
           const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
 
           return (
@@ -244,7 +247,7 @@ const GifPreview = ({ gifs }) => {
           <button
             onClick={() => {
               gifs.forEach((gif, index) => {
-                const gifUrl = `http://localhost:5000${gif.url}`
+                const gifUrl = `${BASE_URL}${gif.url}`
                 const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
                 setTimeout(() => downloadGif(gifUrl, filename), index * 500)
               })
