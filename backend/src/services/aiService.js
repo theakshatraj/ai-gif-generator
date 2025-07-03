@@ -1,28 +1,14 @@
 import OpenAI from "openai"
-import fs from "fs"
 
 class AIService {
   constructor() {
-    // Debug logging
-    console.log("🔧 Initializing AIService...")
-    console.log("🔍 OPENROUTER_API_KEY exists:", !!process.env.OPENROUTER_API_KEY)
-    console.log("🔍 OPENROUTER_API_KEY length:", process.env.OPENROUTER_API_KEY?.length || 0)
+    console.log("🔧 Initializing Enhanced AIService...")
 
-    // Check if OpenRouter API key is available
     const apiKey = process.env.OPENROUTER_API_KEY
-
     if (!apiKey) {
-      console.error("❌ OPENROUTER_API_KEY environment variable is missing or empty")
-      console.error(
-        "Available environment variables:",
-        Object.keys(process.env).filter((key) => key.includes("API")),
-      )
-      throw new Error("OPENROUTER_API_KEY environment variable is missing or empty. Please check your .env file.")
+      throw new Error("OPENROUTER_API_KEY environment variable is missing")
     }
 
-    console.log("✅ OpenRouter API key found, initializing client...")
-
-    // Configure OpenAI client to use OpenRouter
     this.openai = new OpenAI({
       apiKey: apiKey,
       baseURL: "https://openrouter.ai/api/v1",
@@ -32,285 +18,420 @@ class AIService {
       },
     })
 
-    console.log("✅ AIService initialized successfully")
+    console.log("✅ Enhanced AIService initialized successfully")
   }
 
-  async transcribeAudio(audioPath) {
+  // ENHANCED: Handle both dialogue and non-dialogue videos
+  async analyzeVideoContentWithPrompt(transcript, prompt, videoDuration, analysisData = null) {
     try {
-      console.log("🎤 Transcribing audio with Whisper via OpenRouter...")
+      console.log("🧠 Starting enhanced video analysis...")
 
-      if (!fs.existsSync(audioPath)) {
-        throw new Error(`Audio file not found: ${audioPath}`)
+      // Determine video type based on transcript content
+      const videoType = this.determineVideoType(transcript)
+      console.log(`📹 Video type detected: ${videoType}`)
+
+      if (videoType === "dialogue_rich") {
+        return await this.analyzeDialogueVideo(transcript, prompt, videoDuration, analysisData)
+      } else {
+        return await this.analyzeVisualVideo(transcript, prompt, videoDuration, analysisData)
       }
-
-      const audioFile = fs.createReadStream(audioPath)
-
-      // Note: OpenRouter may not support audio transcriptions
-      const transcription = await this.openai.audio.transcriptions.create({
-        file: audioFile,
-        model: "openai/whisper-1",
-        response_format: "verbose_json",
-        timestamp_granularities: ["segment"],
-      })
-
-      console.log("✅ Audio transcribed successfully")
-      console.log(`📝 Transcript: ${transcription.text.substring(0, 200)}...`)
-      return transcription
     } catch (error) {
-      console.error("❌ Transcription Error:", error)
-
-      console.log("⚠️ Using fallback transcript due to transcription error")
-      // Create more realistic fallback segments based on video duration
-      return {
-        text: "This video contains various moments that could be interesting for GIF creation. The content includes different scenes and activities throughout the duration.",
-        segments: [
-          { start: 0, end: 3, text: "Opening scene with initial activity" },
-          { start: 3, end: 6, text: "Middle section with main content" },
-          { start: 6, end: 9, text: "Closing moments with final activity" },
-        ],
-      }
+      console.error("❌ Enhanced analysis failed:", error)
+      return this.createIntelligentFallback(transcript, prompt, videoDuration, analysisData)
     }
   }
 
-  async analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration) {
-    try {
-      console.log("🤖 Analyzing transcript with AI via OpenRouter...")
-      console.log(`📊 Video duration: ${videoDuration} seconds`)
+  // NEW: Determine if video is dialogue-rich or visual-focused
+  determineVideoType(transcript) {
+    const text = transcript.text || ""
+    const segments = transcript.segments || []
 
-      const systemPrompt = `You are a meme GIF caption generator. Your job is to create FUNNY, RELATABLE, and ENGAGING captions for GIFs based on video content and user prompts.
+    // Check transcript quality and content
+    const wordCount = text.split(/\s+/).length
+    const avgWordsPerSecond = segments.length > 0 ? wordCount / (segments[segments.length - 1]?.end || 1) : 0
 
-CAPTION STYLE GUIDELINES:
-- Write like popular meme captions (funny, relatable, internet culture)
-- Use casual language, slang, and meme formats
-- Keep captions SHORT (15-25 characters max)
-- Make them PUNCHY and MEMORABLE
-- Use formats like:
-  * "When you..." 
-  * "Me trying to..."
-  * "POV: you're..."
-  * "That feeling when..."
-  * Direct quotes or reactions
-  * Relatable situations
+    // Check for dialogue indicators
+    const hasDialogueMarkers = /\b(say|said|tell|told|ask|asked|speak|spoke|talk|talked)\b/i.test(text)
+    const hasConversationalWords = /\b(I|you|we|they|he|she|yes|no|okay|well|so|but|and)\b/i.test(text)
+    const hasQuestionMarks = (text.match(/\?/g) || []).length > 0
 
-EXAMPLES OF GOOD MEME CAPTIONS:
-- "When Monday hits"
-- "Me pretending to work"
-- "POV: you're broke"
-- "That's sus"
-- "Big mood"
-- "Me avoiding responsibilities"
-- "When the beat drops"
-- "Caught in 4K"
-- "Main character energy"
+    // Scoring system
+    let dialogueScore = 0
 
-Return EXACTLY 3 moments with this structure:
-[
-  {
-    "startTime": 0,
-    "endTime": 3,
-    "caption": "Meme-style caption here",
-    "reason": "Why this moment matches the prompt"
+    if (avgWordsPerSecond > 1) dialogueScore += 0.3 // Good speech rate
+    if (wordCount > 50) dialogueScore += 0.2 // Substantial content
+    if (hasDialogueMarkers) dialogueScore += 0.2 // Speech indicators
+    if (hasConversationalWords) dialogueScore += 0.2 // Conversational language
+    if (hasQuestionMarks) dialogueScore += 0.1 // Interactive content
+
+    console.log(
+      `📊 Dialogue analysis: ${wordCount} words, ${avgWordsPerSecond.toFixed(2)} words/sec, score: ${dialogueScore.toFixed(2)}`,
+    )
+
+    return dialogueScore > 0.5 ? "dialogue_rich" : "visual_focused"
   }
-]
 
-Rules:
-- MUST return exactly 3 moments
-- Each moment should be 2-3 seconds long
-- startTime and endTime should be integers (seconds)
-- Moments should not overlap significantly
-- Caption should be MEME-STYLE (max 25 characters)
-- Focus on the most engaging/meme-worthy parts
-- Ensure endTime does not exceed ${videoDuration} seconds
-- Return ONLY the JSON array, no other text`
+  // NEW: Analyze dialogue-rich videos
+  async analyzeDialogueVideo(transcript, prompt, videoDuration, analysisData) {
+    try {
+      console.log("🗣️ Analyzing dialogue-rich video...")
 
-      const userPrompt = `Video Duration: ${videoDuration} seconds
-User Prompt: "${prompt}"
+      const systemPrompt = `You are an expert at analyzing dialogue-rich videos to create engaging GIF moments.
 
-Video Content Analysis:
-${transcript.text}
+TASK: Analyze video transcript and user prompt to find the best moments for GIF creation.
 
-Detailed Segments:
-${transcript.segments?.map((seg) => `${Math.floor(seg.start)}s-${Math.floor(seg.end)}s: ${seg.text}`).join("\n") || "No segments available"}
+DIALOGUE VIDEO ANALYSIS APPROACH:
+1. Focus on spoken content that matches the user's theme/prompt
+2. Look for emotional peaks, funny lines, quotable moments
+3. Consider dialogue timing and natural speech breaks
+4. Match spoken content with user's requested theme
+5. Create captions that reflect actual dialogue or paraphrase key points
 
-Create EXACTLY 3 meme-style GIF moments based on the prompt "${prompt}". 
+CAPTION STRATEGY FOR DIALOGUE VIDEOS:
+- Use actual quotes when they're impactful and short
+- Paraphrase longer dialogue into GIF-friendly text
+- Capture the emotional tone of the speech
+- Match the speaker's intent with user's theme request
 
-Focus on making captions that are:
-1. FUNNY and relatable
-2. Match internet meme culture
-3. Are SHORT and punchy
-4. Would make people want to share the GIF
+Return exactly 3 moments with dialogue-based captions.`
 
-Return only the JSON array with meme captions.`
+      const userPrompt = `USER THEME REQUEST: "${prompt}"
 
-      // Use the correct OpenAI model available on OpenRouter
+VIDEO TRANSCRIPT ANALYSIS:
+Duration: ${videoDuration} seconds
+Full Transcript: "${transcript.text}"
+
+DETAILED DIALOGUE SEGMENTS:
+${
+  transcript.segments
+    ?.map(
+      (seg, idx) =>
+        `Segment ${idx + 1}: ${Math.floor(seg.start)}s-${Math.floor(seg.end)}s
+  Dialogue: "${seg.text}"
+  Duration: ${Math.floor(seg.end - seg.start)}s`,
+    )
+    .join("\n") || "No detailed segments available"
+}
+
+ANALYSIS REQUIREMENTS:
+1. Find dialogue moments that align with the theme: "${prompt}"
+2. Look for emotional peaks, funny lines, or quotable content
+3. Ensure selected dialogue matches the user's requested theme
+4. Create captions that either quote directly or capture the essence
+
+For each moment, provide:
+- Exact timing based on dialogue flow
+- Caption that reflects the actual spoken content
+- Clear explanation of how it matches the user's theme
+
+Return JSON array of 3 best dialogue-based moments:`
+
       const completion = await this.openai.chat.completions.create({
-        model: "openai/gpt-3.5-turbo-0613",
+        model: "openai/gpt-4-turbo-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.9, // Higher temperature for more creative/funny responses
-        max_tokens: 800,
+        temperature: 0.3,
+        max_tokens: 1200,
       })
 
       const response = completion.choices[0].message.content.trim()
-      console.log("🤖 AI Response:", response)
+      console.log("🤖 Dialogue analysis response:", response.substring(0, 200) + "...")
 
-      try {
-        const jsonMatch = response.match(/\[[\s\S]*\]/)
-        const jsonString = jsonMatch ? jsonMatch[0] : response
-        const moments = JSON.parse(jsonString)
-
-        if (Array.isArray(moments) && moments.length > 0) {
-          let validMoments = moments
-            .filter(
-              (moment) =>
-                typeof moment.startTime === "number" &&
-                typeof moment.endTime === "number" &&
-                moment.startTime < moment.endTime &&
-                moment.endTime <= videoDuration &&
-                moment.startTime >= 0,
-            )
-            .slice(0, 3) // Ensure exactly 3
-
-          // If we don't have 3 valid moments, create meme-style fallback moments
-          if (validMoments.length < 3) {
-            console.log(`⚠️ Only ${validMoments.length} valid moments found, creating meme-style fallback moments`)
-            validMoments = this.createMemeStyleFallbackMoments(transcript, videoDuration, prompt)
-          }
-
-          console.log("✅ AI analysis completed successfully")
-          console.log(`📊 Found ${validMoments.length} meme-worthy moments`)
-          return validMoments
-        }
-
-        throw new Error("Invalid moments structure")
-      } catch (parseError) {
-        console.error("❌ Failed to parse AI response as JSON:", parseError)
-        throw new Error("Invalid AI response format")
-      }
+      return this.parseAndValidateResponse(response, transcript, videoDuration, "dialogue")
     } catch (error) {
-      console.error("❌ AI Analysis Error:", error)
-
-      const fallbackMoments = this.createMemeStyleFallbackMoments(transcript, videoDuration, prompt)
-      console.log("⚠️ AI analysis failed, using meme-style fallback moments")
-      return fallbackMoments
+      console.error("❌ Dialogue video analysis failed:", error)
+      return this.createDialogueFallback(transcript, prompt, videoDuration)
     }
   }
 
-  createMemeStyleFallbackMoments(transcript, videoDuration, prompt) {
-    console.log("📋 Creating meme-style fallback moments...")
-    console.log(`📊 Video duration: ${videoDuration} seconds`)
+  // NEW: Analyze visual-focused videos
+  async analyzeVisualVideo(transcript, prompt, videoDuration, analysisData) {
+    try {
+      console.log("👁️ Analyzing visual-focused video...")
 
-    const moments = []
+      const systemPrompt = `You are an expert at analyzing visual-focused videos to create engaging GIF moments.
+
+TASK: Analyze visual content and user prompt to find the best visual moments for GIF creation.
+
+VISUAL VIDEO ANALYSIS APPROACH:
+1. Focus on visual elements that match the user's theme/prompt
+2. Look for action sequences, scene changes, visual highlights
+3. Consider visual composition and movement
+4. Match visual content with user's requested theme
+5. Create captions that describe what's visually happening
+
+CAPTION STRATEGY FOR VISUAL VIDEOS:
+- Describe the visual action or scene
+- Capture the mood and atmosphere
+- Use engaging, descriptive language
+- Match visual elements with user's theme request
+- Keep captions punchy and GIF-appropriate
+
+Return exactly 3 moments with visual-based captions.`
+
+      const visualAnalysis = analysisData
+        ? `
+VISUAL ANALYSIS DATA:
+- Scene changes detected: ${analysisData.sceneChanges || 0}
+- Motion activity peaks: ${analysisData.motionAnalysis?.peaks || 0}
+- Audio segments: ${analysisData.audioAnalysis?.segments || 0}
+- Visual features: ${analysisData.visualFeatures || 0}`
+        : ""
+
+      const userPrompt = `USER THEME REQUEST: "${prompt}"
+
+VIDEO VISUAL ANALYSIS:
+Duration: ${videoDuration} seconds
+${visualAnalysis}
+
+VISUAL CONTENT DESCRIPTION:
+${transcript.text || "Visual content analysis based on technical metrics"}
+
+VISUAL SEGMENTS:
+${
+  transcript.segments
+    ?.map(
+      (seg, idx) =>
+        `Segment ${idx + 1}: ${Math.floor(seg.start)}s-${Math.floor(seg.end)}s
+  Visual Description: "${seg.text}"
+  Duration: ${Math.floor(seg.end - seg.start)}s`,
+    )
+    .join("\n") || "Time-based visual segments"
+}
+
+ANALYSIS REQUIREMENTS:
+1. Find visual moments that align with the theme: "${prompt}"
+2. Look for action, scene changes, or visually interesting content
+3. Ensure selected moments match the user's visual theme request
+4. Create captions that describe the visual content engagingly
+
+For each moment, provide:
+- Timing based on visual activity or scene changes
+- Caption that describes what's visually happening
+- Clear explanation of how the visual content matches the user's theme
+
+Return JSON array of 3 best visual moments:`
+
+      const completion = await this.openai.chat.completions.create({
+        model: "openai/gpt-4-turbo-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 1200,
+      })
+
+      const response = completion.choices[0].message.content.trim()
+      console.log("🤖 Visual analysis response:", response.substring(0, 200) + "...")
+
+      return this.parseAndValidateResponse(response, transcript, videoDuration, "visual")
+    } catch (error) {
+      console.error("❌ Visual video analysis failed:", error)
+      return this.createVisualFallback(transcript, prompt, videoDuration)
+    }
+  }
+
+  // NEW: Parse and validate AI response
+  parseAndValidateResponse(response, transcript, videoDuration, videoType) {
+    try {
+      const jsonMatch = response.match(/\[[\s\S]*\]/)
+      if (!jsonMatch) throw new Error("No JSON found in response")
+
+      const moments = JSON.parse(jsonMatch[0])
+
+      if (!Array.isArray(moments) || moments.length === 0) {
+        throw new Error("Invalid moments array")
+      }
+
+      // Validate and enhance moments
+      const validMoments = moments
+        .filter(
+          (moment) =>
+            typeof moment.startTime === "number" &&
+            typeof moment.endTime === "number" &&
+            moment.startTime < moment.endTime &&
+            moment.endTime <= videoDuration &&
+            moment.startTime >= 0 &&
+            moment.caption &&
+            moment.reason,
+        )
+        .map((moment) => ({
+          ...moment,
+          startTime: Math.max(0, Math.floor(moment.startTime)),
+          endTime: Math.min(videoDuration, Math.floor(moment.endTime)),
+          caption: moment.caption.substring(0, 30),
+          confidence: moment.confidence || 0.7,
+          videoType: videoType,
+        }))
+        .slice(0, 3)
+
+      if (validMoments.length === 0) {
+        throw new Error("No valid moments after filtering")
+      }
+
+      console.log(`✅ ${videoType} analysis completed: ${validMoments.length} moments`)
+      return validMoments
+    } catch (error) {
+      console.error("❌ Response parsing failed:", error)
+      throw error
+    }
+  }
+
+  // NEW: Create dialogue-specific fallback
+  createDialogueFallback(transcript, prompt, videoDuration) {
+    console.log("📋 Creating dialogue-focused fallback...")
+
+    const segments = transcript.segments || []
     const promptLower = prompt.toLowerCase()
 
-    // Generate meme captions based on prompt keywords
-    let memeTemplates = []
+    // Score segments based on dialogue content and prompt matching
+    const scoredSegments = segments.map((segment) => {
+      let score = 0.3 // Base score
+      const segmentText = segment.text?.toLowerCase() || ""
 
-    if (promptLower.includes("laugh") || promptLower.includes("funny") || promptLower.includes("comedy")) {
-      memeTemplates = ["When it's actually funny", "Me laughing at my problems", "That's hilarious"]
-    } else if (promptLower.includes("dance") || promptLower.includes("dancing")) {
-      memeTemplates = ["When the beat drops", "Main character energy", "Me at 3AM"]
-    } else if (promptLower.includes("action") || promptLower.includes("fight")) {
-      memeTemplates = ["About to do something", "Main character moment", "That's intense"]
-    } else if (promptLower.includes("sad") || promptLower.includes("cry")) {
-      memeTemplates = ["Big sad energy", "Me on Monday", "That hits different"]
-    } else if (promptLower.includes("surprise") || promptLower.includes("shock")) {
-      memeTemplates = ["Plot twist", "Didn't see that coming", "Caught in 4K"]
-    } else if (promptLower.includes("love") || promptLower.includes("romantic")) {
-      memeTemplates = ["When you're in love", "Relationship goals", "That's cute"]
-    } else if (promptLower.includes("angry") || promptLower.includes("mad")) {
-      memeTemplates = ["When someone lies", "Big mad energy", "That's not it"]
-    } else {
-      // Generic meme templates
-      memeTemplates = ["Big mood", "That's a vibe", "Main character energy"]
-    }
+      // Score based on dialogue quality
+      const wordCount = segmentText.split(/\s+/).length
+      if (wordCount > 5 && wordCount < 15) score += 0.2 // Good length for GIF
 
-    // Always create exactly 3 moments regardless of video duration
-    if (videoDuration >= 9) {
-      // For videos 9+ seconds, create 3 non-overlapping 3-second segments
-      moments.push(
-        {
-          startTime: 0,
-          endTime: 3,
-          caption: memeTemplates[0] || "Opening vibes",
-          reason: "Opening moment with meme potential",
-        },
-        {
-          startTime: Math.floor(videoDuration / 2) - 1,
-          endTime: Math.floor(videoDuration / 2) + 2,
-          caption: memeTemplates[1] || "Peak content",
-          reason: "Middle moment with high engagement",
-        },
-        {
-          startTime: videoDuration - 3,
-          endTime: videoDuration,
-          caption: memeTemplates[2] || "Ending energy",
-          reason: "Closing moment with impact",
-        },
-      )
-    } else if (videoDuration >= 6) {
-      // For 6-8 second videos, create 3 segments with minimal overlap
-      moments.push(
-        {
-          startTime: 0,
-          endTime: 2,
-          caption: memeTemplates[0] || "Start vibes",
-          reason: "Opening meme moment",
-        },
-        {
-          startTime: 2,
-          endTime: 4,
-          caption: memeTemplates[1] || "Mid energy",
-          reason: "Middle meme moment",
-        },
-        {
-          startTime: videoDuration - 2,
-          endTime: videoDuration,
-          caption: memeTemplates[2] || "End mood",
-          reason: "Closing meme moment",
-        },
-      )
-    } else {
-      // For very short videos, create 3 overlapping segments
-      const segmentLength = Math.max(2, Math.floor(videoDuration / 2))
-      for (let i = 0; i < 3; i++) {
-        const startTime = Math.floor((videoDuration / 4) * i)
-        const endTime = Math.min(startTime + segmentLength, videoDuration)
-
-        moments.push({
-          startTime,
-          endTime,
-          caption: memeTemplates[i] || `Vibe ${i + 1}`,
-          reason: `Meme moment ${i + 1}`,
-        })
+      // Score based on prompt matching
+      if (/funny|comedy/.test(promptLower) && /laugh|funny|joke|hilarious/.test(segmentText)) {
+        score += 0.3
       }
-    }
+      if (/emotional|touching/.test(promptLower) && /feel|heart|love|sad|happy/.test(segmentText)) {
+        score += 0.3
+      }
+      if (/motivational|inspiring/.test(promptLower) && /can|will|believe|achieve|success/.test(segmentText)) {
+        score += 0.3
+      }
 
-    console.log(`📊 Created exactly ${moments.length} meme-style fallback moments:`)
-    moments.forEach((moment, index) => {
-      console.log(`  ${index + 1}. ${moment.startTime}s-${moment.endTime}s: "${moment.caption}"`)
+      // Score based on dialogue markers
+      if (/\b(I|you|we|they)\b/.test(segmentText)) score += 0.1
+      if (/[?!]/.test(segmentText)) score += 0.1
+
+      return { ...segment, score }
     })
 
-    return moments
+    // Select top 3 segments
+    const selectedSegments = scoredSegments.sort((a, b) => b.score - a.score).slice(0, 3)
+
+    return selectedSegments.map((segment, index) => ({
+      startTime: Math.max(0, Math.floor(segment.start)),
+      endTime: Math.min(videoDuration, Math.floor(segment.end)),
+      caption: this.generateDialogueCaption(segment, promptLower, index),
+      reason: `Dialogue-based fallback: Score ${segment.score.toFixed(2)}`,
+      confidence: Math.min(0.8, 0.4 + segment.score),
+      videoType: "dialogue",
+    }))
+  }
+
+  // NEW: Create visual-specific fallback
+  createVisualFallback(transcript, prompt, videoDuration) {
+    console.log("📋 Creating visual-focused fallback...")
+
+    const promptLower = prompt.toLowerCase()
+    const segmentCount = Math.min(6, Math.max(3, Math.floor(videoDuration / 3)))
+    const segments = []
+
+    for (let i = 0; i < 3; i++) {
+      const startTime = Math.floor((i / segmentCount) * videoDuration)
+      const endTime = Math.min(Math.floor(((i + 1) / segmentCount) * videoDuration), videoDuration)
+
+      segments.push({
+        startTime,
+        endTime,
+        caption: this.generateVisualCaption(promptLower, i, videoDuration),
+        reason: `Visual-based fallback: Time segment ${i + 1}`,
+        confidence: 0.5,
+        videoType: "visual",
+      })
+    }
+
+    return segments
+  }
+
+  // NEW: Generate dialogue-appropriate captions
+  generateDialogueCaption(segment, promptLower, index) {
+    const segmentText = segment.text || ""
+
+    // Try to use actual dialogue first
+    if (segmentText.length > 0 && segmentText.length <= 25) {
+      return segmentText
+    }
+
+    // Create contextual caption based on dialogue content
+    if (/funny|comedy/.test(promptLower)) {
+      if (/laugh|funny|joke/.test(segmentText.toLowerCase())) return "That's hilarious!"
+      return "Comedy gold"
+    }
+
+    if (/emotional|touching/.test(promptLower)) {
+      if (/love|heart|feel/.test(segmentText.toLowerCase())) return "So touching"
+      return "Emotional moment"
+    }
+
+    if (/motivational/.test(promptLower)) {
+      if (/can|will|believe/.test(segmentText.toLowerCase())) return "So inspiring"
+      return "Motivational words"
+    }
+
+    // Use first few words as fallback
+    const words = segmentText.split(" ").slice(0, 4).join(" ")
+    return words.length > 0 && words.length <= 25 ? words : `Quote ${index + 1}`
+  }
+
+  // NEW: Generate visual-appropriate captions
+  generateVisualCaption(promptLower, index, videoDuration) {
+    const positions = ["Opening scene", "Main moment", "Closing shot"]
+    const position = positions[index] || "Visual moment"
+
+    if (/action|sport|dance/.test(promptLower)) {
+      return `${position} action`
+    }
+    if (/beautiful|scenic/.test(promptLower)) {
+      return `${position} beauty`
+    }
+    if (/funny|comedy/.test(promptLower)) {
+      return `${position} comedy`
+    }
+    if (/dramatic|intense/.test(promptLower)) {
+      return `${position} drama`
+    }
+
+    return position
+  }
+
+  // Backward compatibility
+  async analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration) {
+    return this.analyzeVideoContentWithPrompt(transcript, prompt, videoDuration)
   }
 
   async testConnection() {
     try {
       console.log("🔍 Testing OpenRouter connection...")
-
       const completion = await this.openai.chat.completions.create({
-        model: "openai/gpt-3.5-turbo-0613",
-        messages: [{ role: "user", content: "Hello, this is a test message." }],
-        max_tokens: 10,
+        model: "openai/gpt-3.5-turbo",
+        messages: [{ role: "user", content: "Test" }],
+        max_tokens: 5,
       })
-
       console.log("✅ OpenRouter connection successful")
       return true
     } catch (error) {
       console.error("❌ OpenRouter connection failed:", error)
       return false
+    }
+  }
+
+  // Enhanced fallback that considers video type
+  createIntelligentFallback(transcript, prompt, videoDuration, analysisData) {
+    const videoType = this.determineVideoType(transcript)
+
+    if (videoType === "dialogue_rich") {
+      return this.createDialogueFallback(transcript, prompt, videoDuration)
+    } else {
+      return this.createVisualFallback(transcript, prompt, videoDuration)
     }
   }
 }

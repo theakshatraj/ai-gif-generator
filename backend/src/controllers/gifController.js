@@ -2,16 +2,17 @@ import fs from "fs"
 import path from "path"
 import videoService from "../services/videoService.js"
 import videoAnalysisService from "../services/videoAnalysisService.js"
+import visualContextService from "../services/visualContextService.js"
 import aiService from "../services/aiService.js"
 import gifService from "../services/gifService.js"
+import validationService from "../services/validationService.js"
 
 export const generateGifs = async (req, res) => {
   const startTime = Date.now()
   const tempFiles = []
 
   try {
-    console.log("🚀 Starting GIF generation process...")
-
+    console.log("🚀 Starting enhanced GIF generation for both video types...")
     const { prompt, youtubeUrl } = req.body
     const uploadedFile = req.file
 
@@ -19,15 +20,7 @@ export const generateGifs = async (req, res) => {
     console.log("🎥 YouTube URL:", youtubeUrl)
     console.log("📁 Uploaded file:", uploadedFile?.filename)
 
-    // Test OpenRouter connection first
-    const connectionTest = await aiService.testConnection()
-    if (!connectionTest) {
-      console.log("⚠️ OpenRouter connection failed, will use fallback methods")
-    }
-
-    let videoPath
-    let videoInfo
-    let transcript
+    let videoPath, videoInfo, transcript, analysisData
 
     if (youtubeUrl) {
       console.log("📥 Downloading from YouTube...")
@@ -36,25 +29,46 @@ export const generateGifs = async (req, res) => {
       videoInfo = result.videoInfo
       tempFiles.push(videoPath)
 
-      // Try YouTube captions first
-      console.log("📝 Downloading YouTube captions...")
+      // Try YouTube captions first (for dialogue videos)
+      console.log("📝 Attempting to download YouTube captions...")
       try {
         transcript = await videoService.downloadYoutubeCaptions(youtubeUrl)
-        console.log("✅ YouTube captions downloaded successfully")
-        console.log(`📝 Caption preview: ${transcript.text.substring(0, 200)}...`)
+        console.log("✅ YouTube captions found - treating as dialogue video")
       } catch (captionError) {
-        console.log("⚠️ YouTube captions not available, analyzing video content...")
-        // Use video analysis instead of generic fallback
-        transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+        console.log("⚠️ No YouTube captions - analyzing as visual video...")
+        // Use visual context analysis for non-dialogue videos
+        transcript = await visualContextService.analyzeVisualContent(videoPath, videoInfo.duration, prompt)
+        console.log("✅ Visual content analysis completed")
       }
+
+      // Always run technical analysis for additional context
+      console.log("🔍 Running technical video analysis...")
+      const videoAnalysis = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+      analysisData = videoAnalysis.analysisMetadata
     } else if (uploadedFile) {
-      console.log("📁 Using uploaded file...")
+      console.log("📁 Processing uploaded file...")
       videoPath = uploadedFile.path
       videoInfo = await videoService.getVideoInfo(videoPath)
 
-      // For uploaded files, analyze video content
+      // For uploaded files, try to detect if it has meaningful audio/dialogue
       console.log("🔍 Analyzing uploaded video content...")
-      transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+
+      // First, try basic video analysis to understand content type
+      const basicAnalysis = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+
+      // Check if it might have dialogue (basic audio analysis)
+      const hasSignificantAudio = basicAnalysis.analysisMetadata?.audioSegments > 0
+
+      if (hasSignificantAudio) {
+        console.log("🎵 Audio detected - attempting transcription analysis...")
+        // Could potentially use Whisper or other transcription here
+        transcript = basicAnalysis // Use basic analysis as transcript
+      } else {
+        console.log("👁️ Limited audio - using visual content analysis...")
+        transcript = await visualContextService.analyzeVisualContent(videoPath, videoInfo.duration, prompt)
+      }
+
+      analysisData = basicAnalysis.analysisMetadata
     } else {
       return res.status(400).json({
         success: false,
@@ -63,51 +77,51 @@ export const generateGifs = async (req, res) => {
     }
 
     console.log("📊 Video info:", videoInfo)
-    console.log("📝 Enhanced transcript preview:", transcript.text.substring(0, 300) + "...")
+    console.log("📝 Content analysis preview:", transcript.text.substring(0, 300) + "...")
 
-    // Analyze transcript with AI using enhanced content
-    console.log("🤖 Analyzing enhanced transcript with AI...")
-    const moments = await aiService.analyzeTranscriptWithTimestamps(
+    // ENHANCED: AI analysis now automatically detects and handles both video types
+    console.log("🧠 Running enhanced AI analysis for video type detection...")
+    const moments = await aiService.analyzeVideoContentWithPrompt(
       transcript,
       prompt,
       Number.parseInt(videoInfo.duration),
+      analysisData,
     )
 
-    console.log("🎬 Final moments to process:", JSON.stringify(moments, null, 2))
+    console.log("🎬 AI selected moments:", JSON.stringify(moments, null, 2))
 
     if (!moments || moments.length === 0) {
       return res.status(400).json({
         success: false,
-        error: "No suitable moments found for GIF creation",
+        error: "No contextually relevant moments found. The video content may not match your prompt theme.",
       })
     }
 
-    // Generate GIFs directly from original video
+    // Generate GIFs with type-aware processing
     const gifs = []
     const errors = []
 
     for (let i = 0; i < moments.length; i++) {
       const moment = moments[i]
-      console.log(`🎬 Processing GIF ${i + 1}/${moments.length}`)
+      console.log(`🎬 Processing ${moment.videoType || "unknown"} GIF ${i + 1}/${moments.length}`)
       console.log(`⏱️ Time: ${moment.startTime}s - ${moment.endTime}s`)
       console.log(`💬 Caption: ${moment.caption}`)
+      console.log(`🎯 Reason: ${moment.reason}`)
+      console.log(`📊 Confidence: ${moment.confidence}`)
 
       try {
-        // Create GIF directly from original video
-        console.log(`🎨 Creating GIF ${i + 1} directly from video...`)
         const gif = await gifService.createGif(videoPath, moment)
         gifs.push(gif)
-
-        console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
+        console.log(`✅ ${moment.videoType || "Contextual"} GIF ${i + 1} created successfully (${gif.size})`)
       } catch (error) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, error)
         errors.push(`GIF ${i + 1}: ${error.message}`)
-        // Continue with other GIFs instead of failing completely
       }
     }
 
-    // Clean up temporary files
+    // Cleanup
     console.log("🗑️ Cleaning up temporary files...")
+    visualContextService.cleanup()
     for (const tempFile of tempFiles) {
       try {
         if (fs.existsSync(tempFile)) {
@@ -122,18 +136,22 @@ export const generateGifs = async (req, res) => {
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2)
 
     if (gifs.length === 0) {
-      console.log(`❌ No GIFs were created successfully. Errors: ${errors.join(", ")}`)
       return res.status(500).json({
         success: false,
-        error: `Failed to create any GIFs. Errors: ${errors.join(", ")}`,
+        error: `Failed to create contextually relevant GIFs. Errors: ${errors.join(", ")}`,
       })
     }
 
-    console.log(`🎉 Successfully generated ${gifs.length} GIFs in ${processingTime}s!`)
+    // Enhanced validation
+    const validation = await validationService.validateGifGeneration(prompt, videoInfo, transcript, moments, gifs)
+
+    // Determine video type for response
+    const detectedVideoType = moments[0]?.videoType || "unknown"
 
     res.json({
       success: true,
-      message: `Successfully generated ${gifs.length} GIFs`,
+      message: `Successfully generated ${gifs.length} contextually relevant GIFs`,
+      videoType: detectedVideoType,
       gifs: gifs.map((gif) => ({
         id: gif.id,
         caption: gif.caption,
@@ -142,16 +160,24 @@ export const generateGifs = async (req, res) => {
         size: gif.size,
         hasCaption: gif.hasCaption,
         url: `/gifs/${gif.id}`,
+        confidence: gif.confidence,
+        reason: gif.reason,
+        videoType: gif.videoType || detectedVideoType,
       })),
       processingTime: `${processingTime}s`,
       videoInfo,
-      captionSource: youtubeUrl ? "YouTube Captions + Video Analysis" : "Video Content Analysis",
+      analysisMethod: detectedVideoType === "dialogue" ? "Dialogue + Transcript Analysis" : "Visual Content Analysis",
+      validation: {
+        overallScore: validation.results.overallScore,
+        videoTypeDetection: detectedVideoType,
+      },
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
-    console.error("❌ GIF generation failed:", error)
+    console.error("❌ Enhanced GIF generation failed:", error)
 
-    // Clean up temporary files on error
+    // Cleanup on error
+    visualContextService.cleanup()
     for (const tempFile of tempFiles) {
       try {
         if (fs.existsSync(tempFile)) {
@@ -164,7 +190,7 @@ export const generateGifs = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: error.message || "Failed to generate GIFs",
+      error: error.message || "Failed to generate contextually relevant GIFs",
     })
   }
 }
@@ -174,10 +200,7 @@ export const getGif = async (req, res) => {
     const { id } = req.params
     const gifPath = path.join(process.cwd(), "output", `${id}.gif`)
 
-    console.log(`📁 Looking for GIF: ${gifPath}`)
-
     if (!fs.existsSync(gifPath)) {
-      console.log(`❌ GIF not found: ${gifPath}`)
       return res.status(404).json({
         success: false,
         error: "GIF not found",
@@ -188,7 +211,7 @@ export const getGif = async (req, res) => {
     console.log(`✅ Serving GIF: ${gifPath} (${Math.round(stats.size / 1024)}KB)`)
 
     res.setHeader("Content-Type", "image/gif")
-    res.setHeader("Cache-Control", "public, max-age=31536000") // Cache for 1 year
+    res.setHeader("Cache-Control", "public, max-age=31536000")
     res.sendFile(path.resolve(gifPath))
   } catch (error) {
     console.error("❌ Error serving GIF:", error)
