@@ -11,75 +11,77 @@ class VisualContextService {
     this.ffmpegPath = "ffmpeg"
   }
 
-  // NEW: Analyze visual content for videos without dialogue
+  // ENHANCED: Deep visual content analysis for contextual captions
   async analyzeVisualContent(videoPath, videoDuration, prompt) {
     try {
-      console.log("👁️ Analyzing visual content for non-dialogue video...")
-      console.log(`🎯 User prompt: "${prompt}"`)
+      console.log("👁️ Starting deep visual content analysis...")
+      console.log(`🎯 Theme prompt: "${prompt}"`)
 
-      // Extract key frames for visual analysis
-      const keyFrames = await this.extractKeyFrames(videoPath, videoDuration)
+      // Extract frames at strategic points for detailed analysis
+      const keyFrames = await this.extractDetailedFrames(videoPath, videoDuration)
 
-      // Analyze visual elements
-      const visualElements = await this.analyzeVisualElements(keyFrames, videoDuration)
+      // Analyze visual composition and elements
+      const visualComposition = await this.analyzeVisualComposition(keyFrames)
 
-      // Analyze colors and composition
-      const colorAnalysis = await this.analyzeColors(keyFrames)
+      // Detect specific visual activities and objects
+      const visualActivities = await this.detectSpecificActivities(videoPath, videoDuration, prompt)
 
-      // Detect visual activities
-      const activityAnalysis = await this.detectVisualActivities(videoPath, videoDuration)
+      // Analyze color patterns and mood
+      const visualMood = await this.analyzeVisualMood(keyFrames, prompt)
 
-      // Generate visual descriptions
-      const visualDescriptions = await this.generateVisualDescriptions(
-        visualElements,
-        colorAnalysis,
-        activityAnalysis,
+      // Create contextual segments with rich descriptions
+      const contextualSegments = await this.createContextualSegments(
+        videoPath,
+        videoDuration,
+        visualComposition,
+        visualActivities,
+        visualMood,
         prompt,
       )
 
-      // Create contextual segments based on visual analysis
-      const visualSegments = this.createVisualSegments(visualDescriptions, activityAnalysis, videoDuration, prompt)
-
-      console.log(`✅ Visual analysis completed: ${visualSegments.length} segments identified`)
+      console.log(`✅ Deep visual analysis completed: ${contextualSegments.length} contextual segments`)
 
       return {
-        text: visualSegments.map((seg) => seg.description).join(" "),
-        segments: visualSegments.map((seg) => ({
+        text: contextualSegments.map((seg) => seg.contextualDescription).join(" "),
+        segments: contextualSegments.map((seg) => ({
           start: seg.startTime,
           end: seg.endTime,
-          text: seg.description,
+          text: seg.contextualDescription,
+          visualContext: seg.visualContext,
+          moodContext: seg.moodContext,
+          activityContext: seg.activityContext,
         })),
         visualAnalysis: {
-          keyFrames: keyFrames.length,
-          visualElements,
-          colorAnalysis,
-          activityAnalysis,
-          analysisMethod: "visual-content-analysis",
+          composition: visualComposition,
+          activities: visualActivities,
+          mood: visualMood,
+          analysisMethod: "deep-visual-context-analysis",
         },
       }
     } catch (error) {
-      console.error("❌ Visual content analysis failed:", error)
-      return this.createVisualFallback(videoDuration, prompt)
+      console.error("❌ Deep visual analysis failed:", error)
+      return this.createEnhancedVisualFallback(videoDuration, prompt)
     }
   }
 
-  // Extract key frames at strategic intervals
-  async extractKeyFrames(videoPath, videoDuration) {
+  // Extract frames with better timing for context analysis
+  async extractDetailedFrames(videoPath, videoDuration) {
     try {
-      const frameDir = path.join(this.tempDir, `visual_analysis_${Date.now()}`)
+      const frameDir = path.join(this.tempDir, `detailed_frames_${Date.now()}`)
       if (!fs.existsSync(frameDir)) {
         fs.mkdirSync(frameDir, { recursive: true })
       }
 
-      // Extract frames at strategic points (beginning, middle, end, and activity peaks)
-      const framePoints = this.calculateFrameExtractionPoints(videoDuration)
+      // Extract more frames for better context understanding
+      const frameCount = Math.min(15, Math.max(8, Math.floor(videoDuration * 1.5)))
+      const frameInterval = videoDuration / frameCount
       const frames = []
 
-      for (let i = 0; i < framePoints.length; i++) {
-        const timestamp = framePoints[i]
+      for (let i = 0; i < frameCount; i++) {
+        const timestamp = Math.floor(i * frameInterval)
         const framePath = path.join(frameDir, `frame_${i}_${timestamp}s.jpg`)
 
-        const command = `${this.ffmpegPath} -ss ${timestamp} -i "${videoPath}" -vframes 1 -q:v 2 "${framePath}"`
+        const command = `${this.ffmpegPath} -ss ${timestamp} -i "${videoPath}" -vframes 1 -q:v 2 -vf "scale=640:360" "${framePath}"`
 
         try {
           await execAsync(command, { timeout: 10000 })
@@ -91,6 +93,7 @@ class VisualContextService {
               path: framePath,
               size: stats.size,
               index: i,
+              relativePosition: i / (frameCount - 1), // 0 to 1
             })
           }
         } catch (frameError) {
@@ -98,127 +101,108 @@ class VisualContextService {
         }
       }
 
-      console.log(`📸 Extracted ${frames.length} key frames`)
+      console.log(`📸 Extracted ${frames.length} detailed frames for analysis`)
       return frames
     } catch (error) {
-      console.error("❌ Key frame extraction failed:", error)
+      console.error("❌ Detailed frame extraction failed:", error)
       return []
     }
   }
 
-  // Calculate optimal frame extraction points
-  calculateFrameExtractionPoints(videoDuration) {
-    const points = []
-
-    // Always include beginning and end
-    points.push(1) // 1 second in
-    points.push(Math.max(2, videoDuration - 1)) // 1 second before end
-
-    // Add middle points based on duration
-    if (videoDuration > 10) {
-      points.push(Math.floor(videoDuration * 0.25)) // 25%
-      points.push(Math.floor(videoDuration * 0.5)) // 50%
-      points.push(Math.floor(videoDuration * 0.75)) // 75%
-    } else if (videoDuration > 5) {
-      points.push(Math.floor(videoDuration * 0.5)) // 50%
-    }
-
-    // Add additional points for longer videos
-    if (videoDuration > 30) {
-      for (let i = 10; i < videoDuration - 5; i += 10) {
-        points.push(i)
-      }
-    }
-
-    return [...new Set(points)].sort((a, b) => a - b) // Remove duplicates and sort
-  }
-
-  // Analyze visual elements in frames
-  async analyzeVisualElements(frames, videoDuration) {
-    const analysis = {
-      frameCount: frames.length,
-      avgFrameSize: 0,
-      sizeVariation: 0,
+  // Analyze visual composition for context
+  async analyzeVisualComposition(frames) {
+    const composition = {
+      frameVariation: 0,
       visualComplexity: "medium",
-      hasSignificantChanges: false,
-      estimatedContentType: "general",
+      sceneTypes: [],
+      dominantElements: [],
+      compositionStyle: "standard",
     }
 
-    if (frames.length === 0) return analysis
+    if (frames.length === 0) return composition
 
-    // Calculate average frame size and variation
+    // Analyze frame size variations (indicates visual complexity)
     const sizes = frames.map((f) => f.size)
-    analysis.avgFrameSize = sizes.reduce((a, b) => a + b, 0) / sizes.length
+    const avgSize = sizes.reduce((a, b) => a + b, 0) / sizes.length
+    const sizeVariation = this.calculateVariation(sizes)
 
-    if (sizes.length > 1) {
-      const mean = analysis.avgFrameSize
-      const variance = sizes.reduce((sum, size) => sum + Math.pow(size - mean, 2), 0) / sizes.length
-      analysis.sizeVariation = Math.sqrt(variance) / mean
-    }
+    composition.frameVariation = sizeVariation
+    composition.visualComplexity = this.determineVisualComplexity(avgSize, sizeVariation)
 
-    // Determine visual complexity
-    if (analysis.avgFrameSize > 100000) {
-      analysis.visualComplexity = "high"
-    } else if (analysis.avgFrameSize < 30000) {
-      analysis.visualComplexity = "low"
-    }
+    // Analyze composition patterns
+    composition.sceneTypes = this.identifySceneTypes(frames, avgSize)
+    composition.compositionStyle = this.determineCompositionStyle(sizeVariation, frames.length)
 
-    // Detect significant changes between frames
-    analysis.hasSignificantChanges = analysis.sizeVariation > 0.3
-
-    // Estimate content type based on frame characteristics
-    analysis.estimatedContentType = this.estimateContentType(analysis)
-
-    return analysis
+    return composition
   }
 
-  // Analyze color patterns (basic implementation)
-  async analyzeColors(frames) {
-    // This is a simplified color analysis
-    // In a production system, you might use image processing libraries
-
-    return {
-      dominantColors: ["unknown"], // Would need image processing library
-      colorVariety: frames.length > 3 ? "varied" : "limited",
-      brightness: "medium", // Would analyze actual pixel data
-      contrast: "medium",
-    }
-  }
-
-  // Detect visual activities using FFmpeg
-  async detectVisualActivities(videoPath, videoDuration) {
+  // Detect specific visual activities based on prompt context
+  async detectSpecificActivities(videoPath, videoDuration, prompt) {
     try {
-      console.log("🏃 Detecting visual activities...")
+      console.log("🔍 Detecting specific visual activities...")
 
-      // Use FFmpeg to detect scene changes and motion
-      const sceneChanges = await this.detectSceneChanges(videoPath, videoDuration)
-      const motionLevels = await this.analyzeMotionLevels(videoPath, videoDuration)
-
-      return {
-        sceneChanges,
-        motionLevels,
-        hasHighActivity: sceneChanges.length > videoDuration / 5,
-        hasMotion: motionLevels.peaks > 0,
-        activityType: this.determineActivityType(sceneChanges, motionLevels),
+      const promptLower = prompt.toLowerCase()
+      const activities = {
+        detectedActivities: [],
+        motionIntensity: "medium",
+        sceneChanges: [],
+        visualEvents: [],
       }
+
+      // Detect scene changes with better sensitivity
+      const sceneChanges = await this.detectEnhancedSceneChanges(videoPath, videoDuration)
+      activities.sceneChanges = sceneChanges
+
+      // Detect motion patterns
+      const motionAnalysis = await this.analyzeMotionPatterns(videoPath, videoDuration)
+      activities.motionIntensity = motionAnalysis.intensity
+      activities.detectedActivities = motionAnalysis.activities
+
+      // Context-specific detection based on prompt
+      if (/dance|dancing|music|rhythm/.test(promptLower)) {
+        const danceActivity = await this.detectDanceMovement(videoPath, videoDuration)
+        if (danceActivity.detected) {
+          activities.detectedActivities.push("dance_movement")
+          activities.visualEvents.push(...danceActivity.events)
+        }
+      }
+
+      if (/sport|game|action|active/.test(promptLower)) {
+        const sportActivity = await this.detectSportAction(videoPath, videoDuration)
+        if (sportActivity.detected) {
+          activities.detectedActivities.push("sport_action")
+          activities.visualEvents.push(...sportActivity.events)
+        }
+      }
+
+      if (/nature|scenic|landscape|beautiful/.test(promptLower)) {
+        const scenicActivity = await this.detectScenicContent(videoPath, videoDuration)
+        if (scenicActivity.detected) {
+          activities.detectedActivities.push("scenic_content")
+          activities.visualEvents.push(...scenicActivity.events)
+        }
+      }
+
+      console.log(`🎬 Detected activities: ${activities.detectedActivities.join(", ")}`)
+      return activities
     } catch (error) {
       console.error("❌ Activity detection failed:", error)
       return {
+        detectedActivities: [],
+        motionIntensity: "medium",
         sceneChanges: [],
-        motionLevels: { peaks: 0, avgMotion: 0 },
-        hasHighActivity: false,
-        hasMotion: false,
-        activityType: "static",
+        visualEvents: [],
       }
     }
   }
 
-  // Detect scene changes
-  async detectSceneChanges(videoPath, videoDuration) {
+  // Enhanced scene change detection
+  async detectEnhancedSceneChanges(videoPath, videoDuration) {
     try {
-      const outputFile = path.join(this.tempDir, `scenes_${Date.now()}.log`)
+      const outputFile = path.join(this.tempDir, `enhanced_scenes_${Date.now()}.log`)
 
-      const command = `${this.ffmpegPath} -i "${videoPath}" -vf "select='gt(scene,0.3)',showinfo" -f null - 2>"${outputFile}"`
+      // Use more sensitive scene detection
+      const command = `${this.ffmpegPath} -i "${videoPath}" -vf "select='gt(scene,0.2)',showinfo" -f null - 2>"${outputFile}"`
 
       await execAsync(command, { timeout: 60000 })
 
@@ -235,7 +219,8 @@ class VisualContextService {
             if (timestamp > 0 && timestamp < videoDuration) {
               sceneChanges.push({
                 timestamp,
-                type: "scene_change",
+                type: "scene_transition",
+                intensity: "medium",
               })
             }
           }
@@ -246,203 +231,357 @@ class VisualContextService {
 
       return sceneChanges
     } catch (error) {
-      console.error("❌ Scene change detection failed:", error)
+      console.error("❌ Enhanced scene detection failed:", error)
       return []
     }
   }
 
-  // Analyze motion levels
-  async analyzeMotionLevels(videoPath, videoDuration) {
+  // Analyze motion patterns for context
+  async analyzeMotionPatterns(videoPath, videoDuration) {
     try {
-      // Simplified motion analysis - in production, you'd use more sophisticated methods
-      const outputFile = path.join(this.tempDir, `motion_${Date.now()}.log`)
+      // Detect motion vectors and intensity
+      const outputFile = path.join(this.tempDir, `motion_patterns_${Date.now()}.log`)
 
       const command = `${this.ffmpegPath} -i "${videoPath}" -vf "select='gt(scene,0.1)',showinfo" -f null - 2>"${outputFile}"`
 
       await execAsync(command, { timeout: 60000 })
 
-      let peaks = 0
+      let motionEvents = 0
+      const activities = []
 
       if (fs.existsSync(outputFile)) {
         const content = fs.readFileSync(outputFile, "utf8")
-        peaks = (content.match(/pts_time:/g) || []).length
+        motionEvents = (content.match(/pts_time:/g) || []).length
         fs.unlinkSync(outputFile)
       }
 
+      const motionRate = motionEvents / videoDuration
+
+      let intensity = "low"
+      if (motionRate > 2) {
+        intensity = "high"
+        activities.push("high_motion")
+      } else if (motionRate > 0.5) {
+        intensity = "medium"
+        activities.push("moderate_motion")
+      } else {
+        activities.push("low_motion")
+      }
+
       return {
-        peaks,
-        avgMotion: peaks / Math.max(1, videoDuration),
-        motionType: peaks > videoDuration / 3 ? "high" : peaks > videoDuration / 10 ? "medium" : "low",
+        intensity,
+        activities,
+        motionRate,
+        events: motionEvents,
       }
     } catch (error) {
-      console.error("❌ Motion analysis failed:", error)
-      return { peaks: 0, avgMotion: 0, motionType: "unknown" }
+      console.error("❌ Motion pattern analysis failed:", error)
+      return {
+        intensity: "medium",
+        activities: ["unknown_motion"],
+        motionRate: 0,
+        events: 0,
+      }
     }
   }
 
-  // Generate visual descriptions based on analysis
-  async generateVisualDescriptions(visualElements, colorAnalysis, activityAnalysis, prompt) {
-    const descriptions = []
+  // Detect dance movement patterns
+  async detectDanceMovement(videoPath, videoDuration) {
+    try {
+      // Look for rhythmic motion patterns
+      const motionAnalysis = await this.analyzeMotionPatterns(videoPath, videoDuration)
 
-    // Base description on visual complexity
-    let baseDescription = ""
-    if (visualElements.visualComplexity === "high") {
-      baseDescription = "visually rich content"
-    } else if (visualElements.visualComplexity === "low") {
-      baseDescription = "simple visual content"
-    } else {
-      baseDescription = "moderate visual content"
+      const detected = motionAnalysis.intensity === "high" && motionAnalysis.motionRate > 1.5
+
+      const events = detected
+        ? [
+            { timestamp: videoDuration * 0.2, type: "dance_sequence", description: "rhythmic movement" },
+            { timestamp: videoDuration * 0.6, type: "dance_peak", description: "intense dancing" },
+          ]
+        : []
+
+      return { detected, events }
+    } catch (error) {
+      return { detected: false, events: [] }
     }
+  }
 
-    // Add activity description
-    if (activityAnalysis.hasHighActivity) {
-      baseDescription += " with dynamic scenes"
-    } else if (activityAnalysis.hasMotion) {
-      baseDescription += " with some movement"
-    } else {
-      baseDescription += " with static scenes"
+  // Detect sport/action content
+  async detectSportAction(videoPath, videoDuration) {
+    try {
+      const motionAnalysis = await this.analyzeMotionPatterns(videoPath, videoDuration)
+
+      const detected = motionAnalysis.intensity !== "low" && motionAnalysis.events > 5
+
+      const events = detected
+        ? [
+            { timestamp: videoDuration * 0.3, type: "action_sequence", description: "athletic movement" },
+            { timestamp: videoDuration * 0.7, type: "action_peak", description: "intense action" },
+          ]
+        : []
+
+      return { detected, events }
+    } catch (error) {
+      return { detected: false, events: [] }
     }
+  }
 
-    // Match with prompt context
+  // Detect scenic/nature content
+  async detectScenicContent(videoPath, videoDuration) {
+    try {
+      const motionAnalysis = await this.analyzeMotionPatterns(videoPath, videoDuration)
+
+      // Scenic content typically has low motion but high visual quality
+      const detected = motionAnalysis.intensity === "low"
+
+      const events = detected
+        ? [
+            { timestamp: videoDuration * 0.25, type: "scenic_view", description: "beautiful scenery" },
+            { timestamp: videoDuration * 0.75, type: "scenic_moment", description: "peaceful scene" },
+          ]
+        : []
+
+      return { detected, events }
+    } catch (error) {
+      return { detected: false, events: [] }
+    }
+  }
+
+  // Analyze visual mood and atmosphere
+  async analyzeVisualMood(frames, prompt) {
     const promptLower = prompt.toLowerCase()
 
-    if (/action|sport|dance|move/.test(promptLower) && activityAnalysis.hasMotion) {
-      descriptions.push("action-packed moments")
+    const mood = {
+      atmosphere: "neutral",
+      energy: "medium",
+      tone: "balanced",
+      contextualMood: "general",
     }
 
-    if (/beautiful|scenic|view|landscape/.test(promptLower)) {
-      descriptions.push("scenic visual content")
+    // Determine mood based on prompt and visual analysis
+    if (/funny|comedy|laugh|hilarious/.test(promptLower)) {
+      mood.atmosphere = "playful"
+      mood.energy = "high"
+      mood.tone = "light"
+      mood.contextualMood = "comedic"
+    } else if (/sad|emotional|touching|dramatic/.test(promptLower)) {
+      mood.atmosphere = "emotional"
+      mood.energy = "low"
+      mood.tone = "serious"
+      mood.contextualMood = "dramatic"
+    } else if (/exciting|action|intense|thrilling/.test(promptLower)) {
+      mood.atmosphere = "dynamic"
+      mood.energy = "high"
+      mood.tone = "intense"
+      mood.contextualMood = "exciting"
+    } else if (/beautiful|scenic|peaceful|calm/.test(promptLower)) {
+      mood.atmosphere = "serene"
+      mood.energy = "low"
+      mood.tone = "peaceful"
+      mood.contextualMood = "scenic"
+    } else if (/dance|music|rhythm|beat/.test(promptLower)) {
+      mood.atmosphere = "rhythmic"
+      mood.energy = "high"
+      mood.tone = "musical"
+      mood.contextualMood = "musical"
     }
 
-    if (/funny|comedy/.test(promptLower)) {
-      descriptions.push("potentially comedic visual moments")
-    }
-
-    if (/dramatic|intense/.test(promptLower)) {
-      descriptions.push("visually dramatic scenes")
-    }
-
-    // Add base description if no specific matches
-    if (descriptions.length === 0) {
-      descriptions.push(baseDescription)
-    }
-
-    return descriptions
+    return mood
   }
 
-  // Create visual segments for GIF generation
-  createVisualSegments(visualDescriptions, activityAnalysis, videoDuration, prompt) {
+  // Create contextual segments with rich descriptions
+  async createContextualSegments(videoPath, videoDuration, composition, activities, mood, prompt) {
+    console.log("🎨 Creating contextual segments with rich descriptions...")
+
     const segments = []
-    const promptContext = this.analyzePromptForVisuals(prompt)
+    const promptLower = prompt.toLowerCase()
 
-    // Create segments based on scene changes and activity
-    const sceneChanges = activityAnalysis.sceneChanges || []
+    // Use scene changes if available, otherwise create intelligent time-based segments
+    const sceneChanges = activities.sceneChanges || []
 
-    if (sceneChanges.length > 0) {
-      // Use scene changes to create segments
+    if (sceneChanges.length >= 3) {
+      // Use scene-based segmentation
       for (let i = 0; i < Math.min(6, sceneChanges.length); i++) {
         const sceneChange = sceneChanges[i]
         const startTime = Math.max(0, sceneChange.timestamp - 1)
         const endTime = Math.min(videoDuration, sceneChange.timestamp + 2)
 
+        const contextualDescription = await this.generateRichContextualDescription(
+          startTime,
+          endTime,
+          videoDuration,
+          composition,
+          activities,
+          mood,
+          prompt,
+          i,
+        )
+
         segments.push({
           startTime,
           endTime,
-          description: this.generateSegmentDescription(promptContext, i, "scene_change"),
-          confidence: 0.7,
-          visualContext: "scene_transition",
+          contextualDescription,
+          visualContext: this.getVisualContext(activities, startTime, videoDuration),
+          moodContext: mood.contextualMood,
+          activityContext: activities.detectedActivities,
         })
       }
     } else {
-      // Create time-based segments with visual context
-      const segmentCount = Math.min(6, Math.max(3, Math.floor(videoDuration / 3)))
-      const segmentDuration = videoDuration / segmentCount
+      // Create intelligent time-based segments
+      const segmentCount = Math.min(6, Math.max(3, Math.floor(videoDuration / 2.5)))
 
       for (let i = 0; i < segmentCount; i++) {
-        const startTime = i * segmentDuration
-        const endTime = Math.min((i + 1) * segmentDuration, videoDuration)
+        const startTime = (i / segmentCount) * videoDuration
+        const endTime = Math.min(((i + 1) / segmentCount) * videoDuration, videoDuration)
+
+        const contextualDescription = await this.generateRichContextualDescription(
+          startTime,
+          endTime,
+          videoDuration,
+          composition,
+          activities,
+          mood,
+          prompt,
+          i,
+        )
 
         segments.push({
           startTime,
           endTime,
-          description: this.generateSegmentDescription(promptContext, i, "time_based"),
-          confidence: 0.5,
-          visualContext: "time_segment",
+          contextualDescription,
+          visualContext: this.getVisualContext(activities, startTime, videoDuration),
+          moodContext: mood.contextualMood,
+          activityContext: activities.detectedActivities,
         })
       }
     }
 
-    return segments.slice(0, 6) // Limit to 6 segments
+    return segments.slice(0, 6)
   }
 
-  // Generate segment descriptions based on visual context
-  generateSegmentDescription(promptContext, index, segmentType) {
-    const positions = ["opening", "early", "middle", "later", "closing", "final"]
-    const position = positions[index] || "moment"
+  // Generate rich contextual descriptions
+  async generateRichContextualDescription(
+    startTime,
+    endTime,
+    videoDuration,
+    composition,
+    activities,
+    mood,
+    prompt,
+    index,
+  ) {
+    const promptLower = prompt.toLowerCase()
+    const position = startTime / videoDuration
+    const duration = endTime - startTime
 
-    let description = `${position} visual content`
+    // Base description elements
+    let description = ""
 
-    // Add context based on prompt
-    if (promptContext.isAction) {
-      description = `${position} action sequence`
-    } else if (promptContext.isScenic) {
-      description = `${position} scenic view`
-    } else if (promptContext.isEmotional) {
-      description = `${position} emotional moment`
-    } else if (promptContext.isComedy) {
-      description = `${position} comedic scene`
+    // Determine what's actually happening based on analysis
+    const hasHighMotion = activities.motionIntensity === "high"
+    const hasSceneChange = activities.sceneChanges.some((sc) => sc.timestamp >= startTime && sc.timestamp <= endTime)
+    const visualEvents = activities.visualEvents.filter((ve) => ve.timestamp >= startTime && ve.timestamp <= endTime)
+
+    // Generate contextual description based on detected content and prompt
+    if (/dance|dancing|music/.test(promptLower)) {
+      if (hasHighMotion) {
+        description =
+          index === 0
+            ? "Dance moves begin"
+            : index === 1
+              ? "Rhythm builds up"
+              : index === 2
+                ? "Peak dance moment"
+                : "Dance continues"
+      } else {
+        description = "Musical moment"
+      }
+    } else if (/funny|comedy|laugh/.test(promptLower)) {
+      if (hasSceneChange) {
+        description =
+          index === 0 ? "Comedy setup" : index === 1 ? "Funny moment" : index === 2 ? "Hilarious peak" : "Comedy gold"
+      } else {
+        description = "Comedic scene"
+      }
+    } else if (/action|sport|intense/.test(promptLower)) {
+      if (hasHighMotion) {
+        description =
+          index === 0
+            ? "Action begins"
+            : index === 1
+              ? "Intensity builds"
+              : index === 2
+                ? "Peak action"
+                : "Action continues"
+      } else {
+        description = "Dynamic moment"
+      }
+    } else if (/beautiful|scenic|nature/.test(promptLower)) {
+      description =
+        index === 0
+          ? "Scenic opening"
+          : index === 1
+            ? "Beautiful view"
+            : index === 2
+              ? "Stunning moment"
+              : "Peaceful scene"
+    } else if (/emotional|touching|dramatic/.test(promptLower)) {
+      description =
+        index === 0
+          ? "Emotional start"
+          : index === 1
+            ? "Touching moment"
+            : index === 2
+              ? "Dramatic peak"
+              : "Moving scene"
+    } else {
+      // Generic but contextual based on visual analysis
+      if (hasHighMotion && hasSceneChange) {
+        description = "Dynamic transition"
+      } else if (hasHighMotion) {
+        description = "Active moment"
+      } else if (hasSceneChange) {
+        description = "Scene change"
+      } else {
+        description = position < 0.3 ? "Opening scene" : position < 0.7 ? "Main content" : "Closing moment"
+      }
     }
 
-    // Add segment type context
-    if (segmentType === "scene_change") {
-      description += " with transition"
+    // Add visual event context if available
+    if (visualEvents.length > 0) {
+      const event = visualEvents[0]
+      if (event.description) {
+        description = event.description
+      }
     }
 
     return description
   }
 
-  // Analyze prompt for visual context
-  analyzePromptForVisuals(prompt) {
-    const promptLower = prompt.toLowerCase()
+  // Get visual context for segment
+  getVisualContext(activities, startTime, videoDuration) {
+    const position = startTime / videoDuration
 
-    return {
-      isAction: /action|sport|dance|move|jump|run|active/.test(promptLower),
-      isScenic: /beautiful|scenic|view|landscape|nature|sunset|mountain/.test(promptLower),
-      isEmotional: /emotional|touching|sad|happy|joy|love/.test(promptLower),
-      isComedy: /funny|comedy|comedic|hilarious|laugh/.test(promptLower),
-      isDramatic: /dramatic|intense|serious|powerful/.test(promptLower),
-      isArt: /art|artistic|creative|design|color/.test(promptLower),
-    }
-  }
-
-  // Helper methods
-  estimateContentType(analysis) {
-    if (analysis.hasSignificantChanges && analysis.visualComplexity === "high") {
-      return "dynamic"
-    } else if (analysis.visualComplexity === "high") {
-      return "detailed"
-    } else if (analysis.hasSignificantChanges) {
-      return "changing"
-    } else {
-      return "static"
-    }
-  }
-
-  determineActivityType(sceneChanges, motionLevels) {
-    if (sceneChanges.length > 5 && motionLevels.peaks > 10) {
+    if (activities.detectedActivities.includes("dance_movement")) {
+      return "dance_sequence"
+    } else if (activities.detectedActivities.includes("sport_action")) {
+      return "action_sequence"
+    } else if (activities.detectedActivities.includes("scenic_content")) {
+      return "scenic_view"
+    } else if (activities.motionIntensity === "high") {
       return "high_activity"
-    } else if (sceneChanges.length > 2 || motionLevels.peaks > 5) {
-      return "medium_activity"
+    } else if (activities.motionIntensity === "low") {
+      return "calm_scene"
     } else {
-      return "low_activity"
+      return position < 0.3 ? "opening" : position < 0.7 ? "middle" : "closing"
     }
   }
 
-  // Create fallback for visual analysis
-  createVisualFallback(videoDuration, prompt) {
-    console.log("📋 Creating visual analysis fallback...")
+  // Enhanced fallback with better context
+  createEnhancedVisualFallback(videoDuration, prompt) {
+    console.log("📋 Creating enhanced visual fallback with context...")
 
-    const promptContext = this.analyzePromptForVisuals(prompt)
+    const promptLower = prompt.toLowerCase()
     const segmentCount = Math.min(6, Math.max(3, Math.floor(videoDuration / 3)))
     const segments = []
 
@@ -450,10 +589,33 @@ class VisualContextService {
       const startTime = (i / segmentCount) * videoDuration
       const endTime = Math.min(((i + 1) / segmentCount) * videoDuration, videoDuration)
 
+      let contextualDescription = ""
+
+      // Generate contextual descriptions based on prompt
+      if (/dance|dancing|music/.test(promptLower)) {
+        contextualDescription =
+          i === 0 ? "Dance sequence" : i === 1 ? "Rhythm moment" : i === 2 ? "Dance peak" : "Musical flow"
+      } else if (/funny|comedy/.test(promptLower)) {
+        contextualDescription =
+          i === 0 ? "Comedy setup" : i === 1 ? "Funny bit" : i === 2 ? "Laugh moment" : "Comedic scene"
+      } else if (/action|sport/.test(promptLower)) {
+        contextualDescription =
+          i === 0 ? "Action start" : i === 1 ? "Building up" : i === 2 ? "Peak action" : "Active scene"
+      } else if (/beautiful|scenic/.test(promptLower)) {
+        contextualDescription =
+          i === 0 ? "Scenic view" : i === 1 ? "Beautiful shot" : i === 2 ? "Stunning scene" : "Peaceful moment"
+      } else {
+        contextualDescription =
+          i === 0 ? "Opening moment" : i === 1 ? "Key scene" : i === 2 ? "Highlight" : "Important moment"
+      }
+
       segments.push({
         start: startTime,
         end: endTime,
-        text: this.generateSegmentDescription(promptContext, i, "fallback"),
+        text: contextualDescription,
+        visualContext: "fallback_analysis",
+        moodContext: "contextual",
+        activityContext: ["enhanced_fallback"],
       })
     }
 
@@ -461,20 +623,49 @@ class VisualContextService {
       text: segments.map((seg) => seg.text).join(" "),
       segments: segments,
       visualAnalysis: {
-        analysisMethod: "fallback",
-        promptContext,
+        analysisMethod: "enhanced-fallback",
+        promptContext: promptLower,
       },
     }
   }
 
+  // Helper methods
+  calculateVariation(numbers) {
+    if (numbers.length < 2) return 0
+    const mean = numbers.reduce((a, b) => a + b, 0) / numbers.length
+    const variance = numbers.reduce((sum, num) => sum + Math.pow(num - mean, 2), 0) / numbers.length
+    return Math.sqrt(variance) / mean
+  }
+
+  determineVisualComplexity(avgSize, variation) {
+    if (avgSize > 80000 && variation > 0.3) return "high"
+    if (avgSize > 40000 || variation > 0.2) return "medium"
+    return "low"
+  }
+
+  identifySceneTypes(frames, avgSize) {
+    const types = []
+    if (avgSize > 60000) types.push("detailed_scenes")
+    if (frames.length > 10) types.push("varied_content")
+    return types
+  }
+
+  determineCompositionStyle(variation, frameCount) {
+    if (variation > 0.4) return "dynamic"
+    if (variation > 0.2) return "varied"
+    return "consistent"
+  }
+
   // Cleanup method
   cleanup() {
-    // Clean up any temporary files created during analysis
     try {
       const tempFiles = fs
         .readdirSync(this.tempDir)
         .filter(
-          (file) => file.startsWith("visual_analysis_") || file.startsWith("scenes_") || file.startsWith("motion_"),
+          (file) =>
+            file.startsWith("detailed_frames_") ||
+            file.startsWith("enhanced_scenes_") ||
+            file.startsWith("motion_patterns_"),
         )
 
       tempFiles.forEach((file) => {

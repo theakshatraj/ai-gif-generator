@@ -21,48 +21,44 @@ class AIService {
     console.log("✅ Enhanced AIService initialized successfully")
   }
 
-  // ENHANCED: Handle both dialogue and non-dialogue videos
+  // ENHANCED: Generate truly contextual captions
   async analyzeVideoContentWithPrompt(transcript, prompt, videoDuration, analysisData = null) {
     try {
-      console.log("🧠 Starting enhanced video analysis...")
+      console.log("🧠 Starting contextual caption generation...")
 
-      // Determine video type based on transcript content
       const videoType = this.determineVideoType(transcript)
       console.log(`📹 Video type detected: ${videoType}`)
 
       if (videoType === "dialogue_rich") {
-        return await this.analyzeDialogueVideo(transcript, prompt, videoDuration, analysisData)
+        return await this.analyzeDialogueVideoForContextualCaptions(transcript, prompt, videoDuration, analysisData)
       } else {
-        return await this.analyzeVisualVideo(transcript, prompt, videoDuration, analysisData)
+        return await this.analyzeVisualVideoForContextualCaptions(transcript, prompt, videoDuration, analysisData)
       }
     } catch (error) {
-      console.error("❌ Enhanced analysis failed:", error)
-      return this.createIntelligentFallback(transcript, prompt, videoDuration, analysisData)
+      console.error("❌ Contextual analysis failed:", error)
+      return this.createContextualFallback(transcript, prompt, videoDuration, analysisData)
     }
   }
 
-  // NEW: Determine if video is dialogue-rich or visual-focused
+  // Determine video type
   determineVideoType(transcript) {
     const text = transcript.text || ""
     const segments = transcript.segments || []
 
-    // Check transcript quality and content
     const wordCount = text.split(/\s+/).length
     const avgWordsPerSecond = segments.length > 0 ? wordCount / (segments[segments.length - 1]?.end || 1) : 0
 
-    // Check for dialogue indicators
-    const hasDialogueMarkers = /\b(say|said|tell|told|ask|asked|speak|spoke|talk|talked)\b/i.test(text)
-    const hasConversationalWords = /\b(I|you|we|they|he|she|yes|no|okay|well|so|but|and)\b/i.test(text)
-    const hasQuestionMarks = (text.match(/\?/g) || []).length > 0
+    const hasDialogueMarkers =
+      /\b(say|said|tell|told|ask|asked|speak|spoke|talk|talked|hello|hi|yes|no|okay|well|so|but|and|I|you|we|they)\b/i.test(
+        text,
+      )
+    const hasConversationalWords = /\b(I|you|we|they|he|she|yes|no|okay|well|so|but|and|the|a|an)\b/i.test(text)
 
-    // Scoring system
     let dialogueScore = 0
-
-    if (avgWordsPerSecond > 1) dialogueScore += 0.3 // Good speech rate
-    if (wordCount > 50) dialogueScore += 0.2 // Substantial content
-    if (hasDialogueMarkers) dialogueScore += 0.2 // Speech indicators
-    if (hasConversationalWords) dialogueScore += 0.2 // Conversational language
-    if (hasQuestionMarks) dialogueScore += 0.1 // Interactive content
+    if (avgWordsPerSecond > 0.8) dialogueScore += 0.3
+    if (wordCount > 30) dialogueScore += 0.2
+    if (hasDialogueMarkers) dialogueScore += 0.3
+    if (hasConversationalWords) dialogueScore += 0.2
 
     console.log(
       `📊 Dialogue analysis: ${wordCount} words, ${avgWordsPerSecond.toFixed(2)} words/sec, score: ${dialogueScore.toFixed(2)}`,
@@ -71,60 +67,60 @@ class AIService {
     return dialogueScore > 0.5 ? "dialogue_rich" : "visual_focused"
   }
 
-  // NEW: Analyze dialogue-rich videos
-  async analyzeDialogueVideo(transcript, prompt, videoDuration, analysisData) {
+  // ENHANCED: Analyze dialogue videos for contextual captions
+  async analyzeDialogueVideoForContextualCaptions(transcript, prompt, videoDuration, analysisData) {
     try {
-      console.log("🗣️ Analyzing dialogue-rich video...")
+      console.log("🗣️ Generating contextual captions for dialogue video...")
 
-      const systemPrompt = `You are an expert at analyzing dialogue-rich videos to create engaging GIF moments.
+      const systemPrompt = `You are an expert at creating CONTEXTUAL GIF captions from dialogue-rich videos.
 
-TASK: Analyze video transcript and user prompt to find the best moments for GIF creation.
+CRITICAL REQUIREMENTS:
+1. Create captions that reflect ACTUAL spoken content, not generic templates
+2. Match the dialogue content with the user's theme request
+3. Use direct quotes when impactful, or paraphrase the essence
+4. Avoid generic captions like "Quote 1", "Later content", "Early content"
+5. Make captions specific to what's being said and how it relates to the theme
 
-DIALOGUE VIDEO ANALYSIS APPROACH:
-1. Focus on spoken content that matches the user's theme/prompt
-2. Look for emotional peaks, funny lines, quotable moments
-3. Consider dialogue timing and natural speech breaks
-4. Match spoken content with user's requested theme
-5. Create captions that reflect actual dialogue or paraphrase key points
+CAPTION CREATION STRATEGY:
+- For funny themes: Find actual funny lines or moments
+- For emotional themes: Capture emotional dialogue or moments
+- For motivational themes: Use inspiring quotes or messages
+- For dramatic themes: Find intense or meaningful dialogue
 
-CAPTION STRATEGY FOR DIALOGUE VIDEOS:
-- Use actual quotes when they're impactful and short
-- Paraphrase longer dialogue into GIF-friendly text
-- Capture the emotional tone of the speech
-- Match the speaker's intent with user's theme request
+EXAMPLES OF GOOD CONTEXTUAL CAPTIONS:
+- Instead of "Quote 1" → "That's hilarious!" (if someone laughs)
+- Instead of "Later content" → "So inspiring" (if motivational speech)
+- Instead of "Early content" → "Mind blown" (if surprising revelation)
 
-Return exactly 3 moments with dialogue-based captions.`
+Return exactly 3 moments with CONTEXTUAL captions that reflect actual dialogue content.`
 
-      const userPrompt = `USER THEME REQUEST: "${prompt}"
+      const userPrompt = `USER THEME: "${prompt}"
 
-VIDEO TRANSCRIPT ANALYSIS:
-Duration: ${videoDuration} seconds
-Full Transcript: "${transcript.text}"
+DIALOGUE TRANSCRIPT:
+"${transcript.text}"
 
 DETAILED DIALOGUE SEGMENTS:
 ${
   transcript.segments
-    ?.map(
-      (seg, idx) =>
-        `Segment ${idx + 1}: ${Math.floor(seg.start)}s-${Math.floor(seg.end)}s
-  Dialogue: "${seg.text}"
-  Duration: ${Math.floor(seg.end - seg.start)}s`,
-    )
-    .join("\n") || "No detailed segments available"
+    ?.map((seg, idx) => `${Math.floor(seg.start)}s-${Math.floor(seg.end)}s: "${seg.text}"`)
+    .join("\n") || "No detailed segments"
 }
 
-ANALYSIS REQUIREMENTS:
-1. Find dialogue moments that align with the theme: "${prompt}"
-2. Look for emotional peaks, funny lines, or quotable content
-3. Ensure selected dialogue matches the user's requested theme
-4. Create captions that either quote directly or capture the essence
+TASK: Find 3 dialogue moments that match the theme "${prompt}" and create CONTEXTUAL captions.
+
+REQUIREMENTS:
+1. Analyze what's actually being said in each segment
+2. Match dialogue content with the user's theme
+3. Create captions that reflect the actual spoken words or their essence
+4. NO generic captions like "Quote X" or "Content with scene"
+5. Make each caption specific to what's happening in that moment
 
 For each moment, provide:
-- Exact timing based on dialogue flow
-- Caption that reflects the actual spoken content
-- Clear explanation of how it matches the user's theme
+- Exact timing from dialogue segments
+- Caption that reflects actual dialogue content (max 25 characters)
+- Detailed reason explaining how the dialogue matches the theme
 
-Return JSON array of 3 best dialogue-based moments:`
+Return JSON array only:`
 
       const completion = await this.openai.chat.completions.create({
         model: "openai/gpt-4-turbo-preview",
@@ -132,87 +128,89 @@ Return JSON array of 3 best dialogue-based moments:`
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.3,
-        max_tokens: 1200,
+        temperature: 0.2, // Lower temperature for more consistent results
+        max_tokens: 1000,
       })
 
       const response = completion.choices[0].message.content.trim()
-      console.log("🤖 Dialogue analysis response:", response.substring(0, 200) + "...")
+      console.log("🤖 Dialogue contextual response:", response.substring(0, 300) + "...")
 
-      return this.parseAndValidateResponse(response, transcript, videoDuration, "dialogue")
+      return this.parseContextualResponse(response, transcript, videoDuration, "dialogue")
     } catch (error) {
-      console.error("❌ Dialogue video analysis failed:", error)
-      return this.createDialogueFallback(transcript, prompt, videoDuration)
+      console.error("❌ Dialogue contextual analysis failed:", error)
+      return this.createContextualDialogueFallback(transcript, prompt, videoDuration)
     }
   }
 
-  // NEW: Analyze visual-focused videos
-  async analyzeVisualVideo(transcript, prompt, videoDuration, analysisData) {
+  // ENHANCED: Analyze visual videos for contextual captions
+  async analyzeVisualVideoForContextualCaptions(transcript, prompt, videoDuration, analysisData) {
     try {
-      console.log("👁️ Analyzing visual-focused video...")
+      console.log("👁️ Generating contextual captions for visual video...")
 
-      const systemPrompt = `You are an expert at analyzing visual-focused videos to create engaging GIF moments.
+      const systemPrompt = `You are an expert at creating CONTEXTUAL GIF captions from visual-focused videos.
 
-TASK: Analyze visual content and user prompt to find the best visual moments for GIF creation.
+CRITICAL REQUIREMENTS:
+1. Create captions that describe what's ACTUALLY happening visually
+2. Match visual content with the user's theme request
+3. Avoid generic captions like "Later content", "Early content", "Scene X"
+4. Make captions specific to the visual action, mood, or content
+5. Use engaging, descriptive language that captures the visual essence
 
-VISUAL VIDEO ANALYSIS APPROACH:
-1. Focus on visual elements that match the user's theme/prompt
-2. Look for action sequences, scene changes, visual highlights
-3. Consider visual composition and movement
-4. Match visual content with user's requested theme
-5. Create captions that describe what's visually happening
+CAPTION CREATION STRATEGY:
+- For dance themes: Describe actual dance moves or rhythm
+- For action themes: Capture the specific action happening
+- For scenic themes: Describe the beautiful visual elements
+- For funny themes: Capture visual comedy or amusing moments
 
-CAPTION STRATEGY FOR VISUAL VIDEOS:
-- Describe the visual action or scene
-- Capture the mood and atmosphere
-- Use engaging, descriptive language
-- Match visual elements with user's theme request
-- Keep captions punchy and GIF-appropriate
+EXAMPLES OF GOOD CONTEXTUAL CAPTIONS:
+- Instead of "Later content" → "Epic dance moves" (for dance video)
+- Instead of "Scene change" → "Stunning sunset" (for scenic video)
+- Instead of "Early content" → "Action packed" (for action video)
 
-Return exactly 3 moments with visual-based captions.`
+Return exactly 3 moments with CONTEXTUAL captions that describe actual visual content.`
 
-      const visualAnalysis = analysisData
+      const visualContext = transcript.visualAnalysis
         ? `
-VISUAL ANALYSIS DATA:
-- Scene changes detected: ${analysisData.sceneChanges || 0}
-- Motion activity peaks: ${analysisData.motionAnalysis?.peaks || 0}
-- Audio segments: ${analysisData.audioAnalysis?.segments || 0}
-- Visual features: ${analysisData.visualFeatures || 0}`
+VISUAL ANALYSIS:
+- Detected activities: ${transcript.visualAnalysis.activities?.detectedActivities?.join(", ") || "general"}
+- Motion intensity: ${transcript.visualAnalysis.activities?.motionIntensity || "medium"}
+- Visual mood: ${transcript.visualAnalysis.mood?.contextualMood || "neutral"}
+- Scene changes: ${transcript.visualAnalysis.activities?.sceneChanges?.length || 0}`
         : ""
 
-      const userPrompt = `USER THEME REQUEST: "${prompt}"
+      const userPrompt = `USER THEME: "${prompt}"
 
-VIDEO VISUAL ANALYSIS:
-Duration: ${videoDuration} seconds
-${visualAnalysis}
+VISUAL CONTENT ANALYSIS:
+${transcript.text}
+${visualContext}
 
-VISUAL CONTENT DESCRIPTION:
-${transcript.text || "Visual content analysis based on technical metrics"}
-
-VISUAL SEGMENTS:
+VISUAL SEGMENTS WITH CONTEXT:
 ${
   transcript.segments
     ?.map(
       (seg, idx) =>
-        `Segment ${idx + 1}: ${Math.floor(seg.start)}s-${Math.floor(seg.end)}s
-  Visual Description: "${seg.text}"
-  Duration: ${Math.floor(seg.end - seg.start)}s`,
+        `${Math.floor(seg.start)}s-${Math.floor(seg.end)}s: "${seg.text}"
+  Visual Context: ${seg.visualContext || "general"}
+  Mood: ${seg.moodContext || "neutral"}`,
     )
-    .join("\n") || "Time-based visual segments"
+    .join("\n") || "Time-based segments"
 }
 
-ANALYSIS REQUIREMENTS:
-1. Find visual moments that align with the theme: "${prompt}"
-2. Look for action, scene changes, or visually interesting content
-3. Ensure selected moments match the user's visual theme request
-4. Create captions that describe the visual content engagingly
+TASK: Find 3 visual moments that match the theme "${prompt}" and create CONTEXTUAL captions.
+
+REQUIREMENTS:
+1. Analyze what's actually happening visually in each segment
+2. Match visual content with the user's theme
+3. Create captions that describe the actual visual action or mood
+4. NO generic captions like "Content X" or "Scene with X"
+5. Make each caption specific to the visual content
 
 For each moment, provide:
-- Timing based on visual activity or scene changes
-- Caption that describes what's visually happening
-- Clear explanation of how the visual content matches the user's theme
+- Timing based on visual activity
+- Caption that describes actual visual content (max 25 characters)
+- Detailed reason explaining how the visuals match the theme
 
-Return JSON array of 3 best visual moments:`
+Return JSON array only:`
 
       const completion = await this.openai.chat.completions.create({
         model: "openai/gpt-4-turbo-preview",
@@ -220,22 +218,22 @@ Return JSON array of 3 best visual moments:`
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.3,
-        max_tokens: 1200,
+        temperature: 0.2,
+        max_tokens: 1000,
       })
 
       const response = completion.choices[0].message.content.trim()
-      console.log("🤖 Visual analysis response:", response.substring(0, 200) + "...")
+      console.log("🤖 Visual contextual response:", response.substring(0, 300) + "...")
 
-      return this.parseAndValidateResponse(response, transcript, videoDuration, "visual")
+      return this.parseContextualResponse(response, transcript, videoDuration, "visual")
     } catch (error) {
-      console.error("❌ Visual video analysis failed:", error)
-      return this.createVisualFallback(transcript, prompt, videoDuration)
+      console.error("❌ Visual contextual analysis failed:", error)
+      return this.createContextualVisualFallback(transcript, prompt, videoDuration)
     }
   }
 
-  // NEW: Parse and validate AI response
-  parseAndValidateResponse(response, transcript, videoDuration, videoType) {
+  // Parse contextual response with better validation
+  parseContextualResponse(response, transcript, videoDuration, videoType) {
     try {
       const jsonMatch = response.match(/\[[\s\S]*\]/)
       if (!jsonMatch) throw new Error("No JSON found in response")
@@ -246,7 +244,6 @@ Return JSON array of 3 best visual moments:`
         throw new Error("Invalid moments array")
       }
 
-      // Validate and enhance moments
       const validMoments = moments
         .filter(
           (moment) =>
@@ -256,151 +253,215 @@ Return JSON array of 3 best visual moments:`
             moment.endTime <= videoDuration &&
             moment.startTime >= 0 &&
             moment.caption &&
+            moment.caption.length > 3 &&
+            !this.isGenericCaption(moment.caption) && // Filter out generic captions
             moment.reason,
         )
         .map((moment) => ({
           ...moment,
           startTime: Math.max(0, Math.floor(moment.startTime)),
           endTime: Math.min(videoDuration, Math.floor(moment.endTime)),
-          caption: moment.caption.substring(0, 30),
-          confidence: moment.confidence || 0.7,
+          caption: this.cleanCaption(moment.caption),
+          confidence: moment.confidence || 0.8,
           videoType: videoType,
         }))
         .slice(0, 3)
 
       if (validMoments.length === 0) {
-        throw new Error("No valid moments after filtering")
+        throw new Error("No contextual moments after filtering")
       }
 
-      console.log(`✅ ${videoType} analysis completed: ${validMoments.length} moments`)
+      console.log(`✅ Contextual ${videoType} analysis: ${validMoments.length} moments`)
+      validMoments.forEach((moment, idx) => {
+        console.log(`  ${idx + 1}. "${moment.caption}" (${moment.startTime}s-${moment.endTime}s)`)
+      })
+
       return validMoments
     } catch (error) {
-      console.error("❌ Response parsing failed:", error)
+      console.error("❌ Contextual response parsing failed:", error)
       throw error
     }
   }
 
-  // NEW: Create dialogue-specific fallback
-  createDialogueFallback(transcript, prompt, videoDuration) {
-    console.log("📋 Creating dialogue-focused fallback...")
+  // Check if caption is generic (to filter out)
+  isGenericCaption(caption) {
+    const genericPatterns = [
+      /^quote\s*\d*$/i,
+      /^later\s*content/i,
+      /^early\s*content/i,
+      /^content\s*with/i,
+      /^scene\s*\d*/i,
+      /^segment\s*\d*/i,
+      /^moment\s*\d*/i,
+      /^part\s*\d*/i,
+    ]
+
+    return genericPatterns.some((pattern) => pattern.test(caption.trim()))
+  }
+
+  // Clean and optimize caption
+  cleanCaption(caption) {
+    return caption
+      .replace(/['"]/g, "") // Remove quotes
+      .replace(/[^\w\s\-!?.]/g, "") // Keep only safe characters
+      .substring(0, 25) // Limit length
+      .trim()
+  }
+
+  // Create contextual dialogue fallback
+  createContextualDialogueFallback(transcript, prompt, videoDuration) {
+    console.log("📋 Creating contextual dialogue fallback...")
 
     const segments = transcript.segments || []
     const promptLower = prompt.toLowerCase()
 
-    // Score segments based on dialogue content and prompt matching
-    const scoredSegments = segments.map((segment) => {
-      let score = 0.3 // Base score
-      const segmentText = segment.text?.toLowerCase() || ""
+    const contextualMoments = segments
+      .filter((seg) => seg.text && seg.text.length > 5)
+      .map((segment) => {
+        const segmentText = segment.text.toLowerCase()
+        let caption = ""
+        let score = 0.3
 
-      // Score based on dialogue quality
-      const wordCount = segmentText.split(/\s+/).length
-      if (wordCount > 5 && wordCount < 15) score += 0.2 // Good length for GIF
+        // Generate contextual captions based on actual dialogue content
+        if (/funny|comedy|laugh/.test(promptLower)) {
+          if (/laugh|funny|joke|hilarious|haha/.test(segmentText)) {
+            caption = "That's funny!"
+            score += 0.4
+          } else if (/\?/.test(segment.text)) {
+            caption = "Good question"
+            score += 0.2
+          } else {
+            caption = "Comedy moment"
+            score += 0.1
+          }
+        } else if (/emotional|touching|sad/.test(promptLower)) {
+          if (/love|heart|feel|emotional|sad|happy/.test(segmentText)) {
+            caption = "So touching"
+            score += 0.4
+          } else {
+            caption = "Emotional words"
+            score += 0.2
+          }
+        } else if (/motivational|inspiring/.test(promptLower)) {
+          if (/can|will|believe|achieve|success|dream/.test(segmentText)) {
+            caption = "So inspiring"
+            score += 0.4
+          } else {
+            caption = "Motivational"
+            score += 0.2
+          }
+        } else {
+          // Use actual words from dialogue
+          const words = segment.text.split(" ").slice(0, 3).join(" ")
+          caption = words.length <= 25 ? words : "Meaningful words"
+          score += 0.2
+        }
 
-      // Score based on prompt matching
-      if (/funny|comedy/.test(promptLower) && /laugh|funny|joke|hilarious/.test(segmentText)) {
-        score += 0.3
-      }
-      if (/emotional|touching/.test(promptLower) && /feel|heart|love|sad|happy/.test(segmentText)) {
-        score += 0.3
-      }
-      if (/motivational|inspiring/.test(promptLower) && /can|will|believe|achieve|success/.test(segmentText)) {
-        score += 0.3
-      }
+        return {
+          ...segment,
+          caption,
+          score,
+          startTime: Math.floor(segment.start),
+          endTime: Math.floor(segment.end),
+          reason: `Contextual dialogue: "${segment.text.substring(0, 30)}..."`,
+          confidence: Math.min(0.8, 0.4 + score),
+          videoType: "dialogue",
+        }
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
 
-      // Score based on dialogue markers
-      if (/\b(I|you|we|they)\b/.test(segmentText)) score += 0.1
-      if (/[?!]/.test(segmentText)) score += 0.1
-
-      return { ...segment, score }
-    })
-
-    // Select top 3 segments
-    const selectedSegments = scoredSegments.sort((a, b) => b.score - a.score).slice(0, 3)
-
-    return selectedSegments.map((segment, index) => ({
-      startTime: Math.max(0, Math.floor(segment.start)),
-      endTime: Math.min(videoDuration, Math.floor(segment.end)),
-      caption: this.generateDialogueCaption(segment, promptLower, index),
-      reason: `Dialogue-based fallback: Score ${segment.score.toFixed(2)}`,
-      confidence: Math.min(0.8, 0.4 + segment.score),
-      videoType: "dialogue",
-    }))
+    return contextualMoments.length > 0
+      ? contextualMoments
+      : this.createBasicContextualFallback(prompt, videoDuration, "dialogue")
   }
 
-  // NEW: Create visual-specific fallback
-  createVisualFallback(transcript, prompt, videoDuration) {
-    console.log("📋 Creating visual-focused fallback...")
+  // Create contextual visual fallback
+  createContextualVisualFallback(transcript, prompt, videoDuration) {
+    console.log("📋 Creating contextual visual fallback...")
 
     const promptLower = prompt.toLowerCase()
-    const segmentCount = Math.min(6, Math.max(3, Math.floor(videoDuration / 3)))
-    const segments = []
+    const segments = transcript.segments || []
 
-    for (let i = 0; i < 3; i++) {
-      const startTime = Math.floor((i / segmentCount) * videoDuration)
-      const endTime = Math.min(Math.floor(((i + 1) / segmentCount) * videoDuration), videoDuration)
+    const contextualMoments = []
 
-      segments.push({
-        startTime,
-        endTime,
-        caption: this.generateVisualCaption(promptLower, i, videoDuration),
-        reason: `Visual-based fallback: Time segment ${i + 1}`,
-        confidence: 0.5,
+    for (let i = 0; i < Math.min(3, segments.length); i++) {
+      const segment = segments[i]
+      let caption = ""
+
+      // Generate contextual captions based on visual theme
+      if (/dance|dancing|music/.test(promptLower)) {
+        caption = i === 0 ? "Dance begins" : i === 1 ? "Rhythm flows" : "Dance peak"
+      } else if (/action|sport|intense/.test(promptLower)) {
+        caption = i === 0 ? "Action starts" : i === 1 ? "Intensity builds" : "Peak action"
+      } else if (/funny|comedy/.test(promptLower)) {
+        caption = i === 0 ? "Comedy setup" : i === 1 ? "Funny moment" : "Hilarious!"
+      } else if (/beautiful|scenic|nature/.test(promptLower)) {
+        caption = i === 0 ? "Beautiful view" : i === 1 ? "Stunning scene" : "Nature's beauty"
+      } else if (/dramatic|emotional/.test(promptLower)) {
+        caption = i === 0 ? "Drama unfolds" : i === 1 ? "Emotional peak" : "Powerful moment"
+      } else {
+        // Use segment description if available
+        if (segment.text && !this.isGenericCaption(segment.text)) {
+          caption = segment.text.substring(0, 25)
+        } else {
+          caption = i === 0 ? "Opening moment" : i === 1 ? "Key scene" : "Highlight"
+        }
+      }
+
+      contextualMoments.push({
+        startTime: Math.floor(segment.start || (i * videoDuration) / 3),
+        endTime: Math.floor(segment.end || ((i + 1) * videoDuration) / 3),
+        caption: caption,
+        reason: `Contextual visual: ${segment.visualContext || "visual content"}`,
+        confidence: 0.6,
         videoType: "visual",
       })
     }
 
-    return segments
+    return contextualMoments
   }
 
-  // NEW: Generate dialogue-appropriate captions
-  generateDialogueCaption(segment, promptLower, index) {
-    const segmentText = segment.text || ""
+  // Create basic contextual fallback
+  createBasicContextualFallback(prompt, videoDuration, videoType) {
+    const promptLower = prompt.toLowerCase()
+    const moments = []
 
-    // Try to use actual dialogue first
-    if (segmentText.length > 0 && segmentText.length <= 25) {
-      return segmentText
+    for (let i = 0; i < 3; i++) {
+      const startTime = Math.floor((i * videoDuration) / 3)
+      const endTime = Math.floor(((i + 1) * videoDuration) / 3)
+
+      let caption = ""
+
+      if (videoType === "dialogue") {
+        if (/funny/.test(promptLower)) {
+          caption = i === 0 ? "Funny start" : i === 1 ? "Comedy gold" : "Hilarious end"
+        } else if (/emotional/.test(promptLower)) {
+          caption = i === 0 ? "Emotional" : i === 1 ? "Touching" : "Moving"
+        } else {
+          caption = i === 0 ? "Opening words" : i === 1 ? "Key message" : "Final thoughts"
+        }
+      } else {
+        if (/dance/.test(promptLower)) {
+          caption = i === 0 ? "Dance moves" : i === 1 ? "Rhythm" : "Dance finale"
+        } else if (/action/.test(promptLower)) {
+          caption = i === 0 ? "Action" : i === 1 ? "Intensity" : "Peak moment"
+        } else {
+          caption = i === 0 ? "Visual start" : i === 1 ? "Main scene" : "Visual end"
+        }
+      }
+
+      moments.push({
+        startTime,
+        endTime,
+        caption,
+        reason: `Basic contextual fallback for ${videoType}`,
+        confidence: 0.5,
+        videoType,
+      })
     }
 
-    // Create contextual caption based on dialogue content
-    if (/funny|comedy/.test(promptLower)) {
-      if (/laugh|funny|joke/.test(segmentText.toLowerCase())) return "That's hilarious!"
-      return "Comedy gold"
-    }
-
-    if (/emotional|touching/.test(promptLower)) {
-      if (/love|heart|feel/.test(segmentText.toLowerCase())) return "So touching"
-      return "Emotional moment"
-    }
-
-    if (/motivational/.test(promptLower)) {
-      if (/can|will|believe/.test(segmentText.toLowerCase())) return "So inspiring"
-      return "Motivational words"
-    }
-
-    // Use first few words as fallback
-    const words = segmentText.split(" ").slice(0, 4).join(" ")
-    return words.length > 0 && words.length <= 25 ? words : `Quote ${index + 1}`
-  }
-
-  // NEW: Generate visual-appropriate captions
-  generateVisualCaption(promptLower, index, videoDuration) {
-    const positions = ["Opening scene", "Main moment", "Closing shot"]
-    const position = positions[index] || "Visual moment"
-
-    if (/action|sport|dance/.test(promptLower)) {
-      return `${position} action`
-    }
-    if (/beautiful|scenic/.test(promptLower)) {
-      return `${position} beauty`
-    }
-    if (/funny|comedy/.test(promptLower)) {
-      return `${position} comedy`
-    }
-    if (/dramatic|intense/.test(promptLower)) {
-      return `${position} drama`
-    }
-
-    return position
+    return moments
   }
 
   // Backward compatibility
@@ -424,14 +485,14 @@ Return JSON array of 3 best visual moments:`
     }
   }
 
-  // Enhanced fallback that considers video type
-  createIntelligentFallback(transcript, prompt, videoDuration, analysisData) {
+  // Enhanced fallback that creates contextual captions
+  createContextualFallback(transcript, prompt, videoDuration, analysisData) {
     const videoType = this.determineVideoType(transcript)
 
     if (videoType === "dialogue_rich") {
-      return this.createDialogueFallback(transcript, prompt, videoDuration)
+      return this.createContextualDialogueFallback(transcript, prompt, videoDuration)
     } else {
-      return this.createVisualFallback(transcript, prompt, videoDuration)
+      return this.createContextualVisualFallback(transcript, prompt, videoDuration)
     }
   }
 }
