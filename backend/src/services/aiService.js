@@ -72,102 +72,85 @@ class AIService {
     }
   }
 
-  async analyzeVideoContentWithPrompt(transcript, prompt, videoDuration, visualAnalysis = null) {
+  async analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration) {
     try {
-      console.log("🤖 Analyzing video content with enhanced context detection...")
+      console.log("🤖 Analyzing transcript with AI via OpenRouter...")
       console.log(`📊 Video duration: ${videoDuration} seconds`)
-      console.log(`🎯 User prompt: "${prompt}"`)
 
-      // Enhanced system prompt for better context understanding
-      const systemPrompt = `You are an expert video content analyzer that creates engaging GIF moments by understanding both the video content and user intent.
+      const systemPrompt = `You are a meme GIF caption generator. Your job is to create FUNNY, RELATABLE, and ENGAGING captions for GIFs based on video content and user prompts.
 
-CORE RESPONSIBILITIES:
-1. Analyze video transcript and visual cues to understand what's actually happening
-2. Match user prompts with relevant video content
-3. Identify moments that align with user requests
-4. Create captions that reflect both the video content and user intent
+CAPTION STYLE GUIDELINES:
+- Write like popular meme captions (funny, relatable, internet culture)
+- Use casual language, slang, and meme formats
+- Keep captions SHORT (15-25 characters max)
+- Make them PUNCHY and MEMORABLE
+- Use formats like:
+  * "When you..." 
+  * "Me trying to..."
+  * "POV: you're..."
+  * "That feeling when..."
+  * Direct quotes or reactions
+  * Relatable situations
 
-ANALYSIS FRAMEWORK:
-- Content Understanding: What is actually happening in the video?
-- Prompt Matching: How does the user's request relate to the video content?
-- Moment Selection: Which specific timestamps best match the request?
-- Caption Creation: How to describe these moments engagingly?
+EXAMPLES OF GOOD MEME CAPTIONS:
+- "When Monday hits"
+- "Me pretending to work"
+- "POV: you're broke"
+- "That's sus"
+- "Big mood"
+- "Me avoiding responsibilities"
+- "When the beat drops"
+- "Caught in 4K"
+- "Main character energy"
 
-CAPTION GUIDELINES:
-- Reflect actual video content, not generic templates
-- Match the tone requested by the user (funny, dramatic, emotional, etc.)
-- Be specific to what's visible/audible in the video
-- Keep captions engaging but contextually accurate
-- Maximum 30 characters for readability
-
-QUALITY STANDARDS:
-- Every selected moment must have clear relevance to the user prompt
-- Captions must describe actual video content, not generic scenarios
-- Timing must correspond to meaningful content changes
-- Avoid overlapping moments unless video is very short
-
-Return EXACTLY 3 moments in this JSON format:
+Return EXACTLY 3 moments with this structure:
 [
   {
     "startTime": 0,
     "endTime": 3,
-    "caption": "Contextual caption here",
-    "reason": "Detailed explanation of why this moment matches the prompt and video content",
-    "confidence": 0.85
+    "caption": "Meme-style caption here",
+    "reason": "Why this moment matches the prompt"
   }
 ]
 
-CRITICAL: Base your analysis on ACTUAL video content, not assumptions.`
+Rules:
+- MUST return exactly 3 moments
+- Each moment should be 2-3 seconds long
+- startTime and endTime should be integers (seconds)
+- Moments should not overlap significantly
+- Caption should be MEME-STYLE (max 25 characters)
+- Focus on the most engaging/meme-worthy parts
+- Ensure endTime does not exceed ${videoDuration} seconds
+- Return ONLY the JSON array, no other text`
 
-      // Enhanced user prompt with better context
-      const userPrompt = `PROMPT ANALYSIS:
-User Request: "${prompt}"
-Video Duration: ${videoDuration} seconds
+      const userPrompt = `Video Duration: ${videoDuration} seconds
+User Prompt: "${prompt}"
 
-VIDEO CONTENT ANALYSIS:
-Full Transcript: "${transcript.text}"
+Video Content Analysis:
+${transcript.text}
 
-DETAILED SEGMENTS:
-${transcript.segments?.map((seg, idx) => 
-  `Segment ${idx + 1}: ${Math.floor(seg.start)}s-${Math.floor(seg.end)}s
-  Content: "${seg.text}"
-  Duration: ${Math.floor(seg.end - seg.start)}s`
-).join("\n") || "No detailed segments available"}
+Detailed Segments:
+${transcript.segments?.map((seg) => `${Math.floor(seg.start)}s-${Math.floor(seg.end)}s: ${seg.text}`).join("\n") || "No segments available"}
 
-${visualAnalysis ? `
-VISUAL ANALYSIS:
-${visualAnalysis}
-` : ""}
+Create EXACTLY 3 meme-style GIF moments based on the prompt "${prompt}". 
 
-CONTEXT MATCHING TASK:
-1. Analyze how the user prompt relates to the actual video content
-2. Identify 3 specific moments where the video content aligns with the user request
-3. Create contextually accurate captions that reflect both the video content and user intent
-4. Ensure each moment has clear relevance to the prompt
+Focus on making captions that are:
+1. FUNNY and relatable
+2. Match internet meme culture
+3. Are SHORT and punchy
+4. Would make people want to share the GIF
 
-PROMPT INTERPRETATION:
-- If prompt mentions emotions (funny, sad, etc.): Find moments with corresponding emotional content
-- If prompt mentions actions (dancing, talking, etc.): Find moments with those specific actions
-- If prompt mentions themes (motivational, romantic, etc.): Find moments that convey those themes
-- If prompt is generic: Find the most engaging/interesting moments
+Return only the JSON array with meme captions.`
 
-QUALITY REQUIREMENTS:
-- Each moment must have >0.7 confidence score
-- Captions must be specific to actual video content
-- Timing must align with meaningful content boundaries
-- No generic or template-based responses
-
-Return the 3 best matching moments as JSON array only.`
-
-      // Use enhanced model for better analysis
+      // Use the correct OpenAI model available on OpenRouter
       const completion = await this.openai.chat.completions.create({
-        model: "openai/gpt-4-turbo-preview", // Use more powerful model
+        model: "openai/gpt-3.5-turbo-0613",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.3, // Lower temperature for more consistent, analytical responses
-        max_tokens: 1000,
+        temperature: 0.9, // Higher temperature for more creative/funny responses
+        max_tokens: 800,
       })
 
       const response = completion.choices[0].message.content.trim()
@@ -180,269 +163,137 @@ Return the 3 best matching moments as JSON array only.`
 
         if (Array.isArray(moments) && moments.length > 0) {
           let validMoments = moments
-            .filter(moment => 
-              typeof moment.startTime === "number" &&
-              typeof moment.endTime === "number" &&
-              moment.startTime < moment.endTime &&
-              moment.endTime <= videoDuration &&
-              moment.startTime >= 0 &&
-              moment.caption &&
-              moment.reason &&
-              (moment.confidence || 0) > 0.5 // Ensure minimum confidence
+            .filter(
+              (moment) =>
+                typeof moment.startTime === "number" &&
+                typeof moment.endTime === "number" &&
+                moment.startTime < moment.endTime &&
+                moment.endTime <= videoDuration &&
+                moment.startTime >= 0,
             )
-            .sort((a, b) => (b.confidence || 0) - (a.confidence || 0)) // Sort by confidence
-            .slice(0, 3) // Take top 3
+            .slice(0, 3) // Ensure exactly 3
 
-          // Enhanced validation: check for content relevance
-          validMoments = validMoments.map(moment => ({
-            ...moment,
-            startTime: Math.max(0, Math.floor(moment.startTime)),
-            endTime: Math.min(videoDuration, Math.floor(moment.endTime)),
-            caption: moment.caption.substring(0, 30), // Ensure caption length
-          }))
-
-          // If we don't have enough high-quality moments, use enhanced fallback
+          // If we don't have 3 valid moments, create meme-style fallback moments
           if (validMoments.length < 3) {
-            console.log(`⚠️ Only ${validMoments.length} high-quality moments found, using enhanced fallback`)
-            const fallbackMoments = this.createEnhancedFallbackMoments(transcript, videoDuration, prompt)
-            
-            // Combine AI moments with fallback, preferring AI moments
-            const combinedMoments = [...validMoments]
-            for (const fallback of fallbackMoments) {
-              if (combinedMoments.length >= 3) break
-              if (!combinedMoments.some(m => Math.abs(m.startTime - fallback.startTime) < 2)) {
-                combinedMoments.push(fallback)
-              }
-            }
-            
-            validMoments = combinedMoments.slice(0, 3)
+            console.log(`⚠️ Only ${validMoments.length} valid moments found, creating meme-style fallback moments`)
+            validMoments = this.createMemeStyleFallbackMoments(transcript, videoDuration, prompt)
           }
 
-          console.log("✅ Enhanced AI analysis completed successfully")
-          console.log(`📊 Found ${validMoments.length} contextually relevant moments`)
-          validMoments.forEach((moment, idx) => {
-            console.log(`  ${idx + 1}. ${moment.startTime}s-${moment.endTime}s: "${moment.caption}" (confidence: ${moment.confidence || 'N/A'})`)
-          })
-          
+          console.log("✅ AI analysis completed successfully")
+          console.log(`📊 Found ${validMoments.length} meme-worthy moments`)
           return validMoments
         }
 
         throw new Error("Invalid moments structure")
       } catch (parseError) {
         console.error("❌ Failed to parse AI response as JSON:", parseError)
-        console.log("🔄 Using enhanced fallback analysis")
-        return this.createEnhancedFallbackMoments(transcript, videoDuration, prompt)
+        throw new Error("Invalid AI response format")
       }
     } catch (error) {
-      console.error("❌ Enhanced AI Analysis Error:", error)
-      console.log("🔄 Using enhanced fallback analysis")
-      return this.createEnhancedFallbackMoments(transcript, videoDuration, prompt)
+      console.error("❌ AI Analysis Error:", error)
+
+      const fallbackMoments = this.createMemeStyleFallbackMoments(transcript, videoDuration, prompt)
+      console.log("⚠️ AI analysis failed, using meme-style fallback moments")
+      return fallbackMoments
     }
   }
 
-  createEnhancedFallbackMoments(transcript, videoDuration, prompt) {
-    console.log("📋 Creating enhanced fallback moments based on content analysis...")
-    
-    const promptLower = prompt.toLowerCase()
-    const transcriptLower = transcript.text?.toLowerCase() || ""
-    
-    // Analyze prompt intent
-    const promptAnalysis = this.analyzePromptIntent(promptLower)
-    
-    // Analyze transcript content
-    const contentAnalysis = this.analyzeTranscriptContent(transcriptLower, transcript.segments)
-    
-    // Find relevant segments based on content matching
-    const relevantSegments = this.findRelevantSegments(transcript.segments, promptAnalysis, contentAnalysis)
-    
+  createMemeStyleFallbackMoments(transcript, videoDuration, prompt) {
+    console.log("📋 Creating meme-style fallback moments...")
+    console.log(`📊 Video duration: ${videoDuration} seconds`)
+
     const moments = []
-    
-    if (relevantSegments.length >= 3) {
-      // Use the most relevant segments
-      for (let i = 0; i < 3; i++) {
-        const segment = relevantSegments[i]
-        moments.push({
-          startTime: Math.max(0, Math.floor(segment.start)),
-          endTime: Math.min(videoDuration, Math.floor(segment.end)),
-          caption: this.generateContextualCaption(segment, promptAnalysis),
-          reason: `Content-matched segment: ${segment.text.substring(0, 50)}...`,
-          confidence: segment.relevanceScore || 0.6
-        })
-      }
+    const promptLower = prompt.toLowerCase()
+
+    // Generate meme captions based on prompt keywords
+    let memeTemplates = []
+
+    if (promptLower.includes("laugh") || promptLower.includes("funny") || promptLower.includes("comedy")) {
+      memeTemplates = ["When it's actually funny", "Me laughing at my problems", "That's hilarious"]
+    } else if (promptLower.includes("dance") || promptLower.includes("dancing")) {
+      memeTemplates = ["When the beat drops", "Main character energy", "Me at 3AM"]
+    } else if (promptLower.includes("action") || promptLower.includes("fight")) {
+      memeTemplates = ["About to do something", "Main character moment", "That's intense"]
+    } else if (promptLower.includes("sad") || promptLower.includes("cry")) {
+      memeTemplates = ["Big sad energy", "Me on Monday", "That hits different"]
+    } else if (promptLower.includes("surprise") || promptLower.includes("shock")) {
+      memeTemplates = ["Plot twist", "Didn't see that coming", "Caught in 4K"]
+    } else if (promptLower.includes("love") || promptLower.includes("romantic")) {
+      memeTemplates = ["When you're in love", "Relationship goals", "That's cute"]
+    } else if (promptLower.includes("angry") || promptLower.includes("mad")) {
+      memeTemplates = ["When someone lies", "Big mad energy", "That's not it"]
     } else {
-      // Fallback to time-based segments with content awareness
-      const segmentCount = Math.min(3, Math.max(1, Math.floor(videoDuration / 3)))
-      const segmentDuration = videoDuration / segmentCount
-      
+      // Generic meme templates
+      memeTemplates = ["Big mood", "That's a vibe", "Main character energy"]
+    }
+
+    // Always create exactly 3 moments regardless of video duration
+    if (videoDuration >= 9) {
+      // For videos 9+ seconds, create 3 non-overlapping 3-second segments
+      moments.push(
+        {
+          startTime: 0,
+          endTime: 3,
+          caption: memeTemplates[0] || "Opening vibes",
+          reason: "Opening moment with meme potential",
+        },
+        {
+          startTime: Math.floor(videoDuration / 2) - 1,
+          endTime: Math.floor(videoDuration / 2) + 2,
+          caption: memeTemplates[1] || "Peak content",
+          reason: "Middle moment with high engagement",
+        },
+        {
+          startTime: videoDuration - 3,
+          endTime: videoDuration,
+          caption: memeTemplates[2] || "Ending energy",
+          reason: "Closing moment with impact",
+        },
+      )
+    } else if (videoDuration >= 6) {
+      // For 6-8 second videos, create 3 segments with minimal overlap
+      moments.push(
+        {
+          startTime: 0,
+          endTime: 2,
+          caption: memeTemplates[0] || "Start vibes",
+          reason: "Opening meme moment",
+        },
+        {
+          startTime: 2,
+          endTime: 4,
+          caption: memeTemplates[1] || "Mid energy",
+          reason: "Middle meme moment",
+        },
+        {
+          startTime: videoDuration - 2,
+          endTime: videoDuration,
+          caption: memeTemplates[2] || "End mood",
+          reason: "Closing meme moment",
+        },
+      )
+    } else {
+      // For very short videos, create 3 overlapping segments
+      const segmentLength = Math.max(2, Math.floor(videoDuration / 2))
       for (let i = 0; i < 3; i++) {
-        const startTime = Math.floor(i * segmentDuration)
-        const endTime = Math.min(Math.floor((i + 1) * segmentDuration), videoDuration)
-        
-        // Find corresponding transcript segment
-        const correspondingSegment = transcript.segments?.find(seg => 
-          seg.start <= startTime && seg.end >= startTime
-        )
-        
+        const startTime = Math.floor((videoDuration / 4) * i)
+        const endTime = Math.min(startTime + segmentLength, videoDuration)
+
         moments.push({
           startTime,
           endTime,
-          caption: this.generateContextualCaption(correspondingSegment, promptAnalysis, i),
-          reason: `Time-based segment with content context`,
-          confidence: 0.5
+          caption: memeTemplates[i] || `Vibe ${i + 1}`,
+          reason: `Meme moment ${i + 1}`,
         })
       }
     }
-    
-    console.log(`📊 Created ${moments.length} enhanced fallback moments`)
-    return moments
-  }
 
-  analyzePromptIntent(promptLower) {
-    return {
-      isEmotional: /funny|laugh|sad|cry|happy|excited|angry|surprised|emotional/.test(promptLower),
-      isAction: /dance|dancing|move|moving|action|jump|run|walk|activity/.test(promptLower),
-      isDialogue: /talk|talking|speak|speaking|conversation|dialogue|quote|saying/.test(promptLower),
-      isHighlight: /best|highlight|good|great|amazing|awesome|top|peak/.test(promptLower),
-      isSpecific: /moment|scene|part|section|clip/.test(promptLower),
-      tone: this.extractTone(promptLower),
-      keywords: this.extractKeywords(promptLower)
-    }
-  }
-
-  analyzeTranscriptContent(transcriptLower, segments) {
-    const hasEmotionalWords = /laugh|cry|happy|sad|excited|wow|amazing|great|love|hate/.test(transcriptLower)
-    const hasActionWords = /move|dance|run|jump|go|come|start|stop|play/.test(transcriptLower)
-    const hasDialogueMarkers = /say|tell|talk|speak|ask|answer|think|know/.test(transcriptLower)
-    
-    return {
-      hasEmotionalContent: hasEmotionalWords,
-      hasActionContent: hasActionWords,
-      hasDialogueContent: hasDialogueMarkers,
-      segments: segments || [],
-      contentType: this.determineContentType(transcriptLower)
-    }
-  }
-
-  findRelevantSegments(segments, promptAnalysis, contentAnalysis) {
-    if (!segments || segments.length === 0) return []
-    
-    return segments.map(segment => {
-      const segmentText = segment.text.toLowerCase()
-      let relevanceScore = 0
-      
-      // Score based on prompt intent matching
-      if (promptAnalysis.isEmotional && /laugh|cry|happy|sad|excited|wow|amazing/.test(segmentText)) {
-        relevanceScore += 0.3
-      }
-      
-      if (promptAnalysis.isAction && /move|dance|run|jump|go|come|start|stop/.test(segmentText)) {
-        relevanceScore += 0.3
-      }
-      
-      if (promptAnalysis.isDialogue && /say|tell|talk|speak|ask|answer/.test(segmentText)) {
-        relevanceScore += 0.3
-      }
-      
-      // Score based on keyword matching
-      for (const keyword of promptAnalysis.keywords) {
-        if (segmentText.includes(keyword)) {
-          relevanceScore += 0.2
-        }
-      }
-      
-      // Score based on segment quality (length, position)
-      const duration = segment.end - segment.start
-      if (duration >= 2 && duration <= 5) {
-        relevanceScore += 0.1
-      }
-      
-      return {
-        ...segment,
-        relevanceScore
-      }
+    console.log(`📊 Created exactly ${moments.length} meme-style fallback moments:`)
+    moments.forEach((moment, index) => {
+      console.log(`  ${index + 1}. ${moment.startTime}s-${moment.endTime}s: "${moment.caption}"`)
     })
-    .filter(segment => segment.relevanceScore > 0.2)
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-  }
 
-  generateContextualCaption(segment, promptAnalysis, index = 0) {
-    if (!segment || !segment.text) {
-      return this.generateGenericCaption(promptAnalysis, index)
-    }
-    
-    const segmentText = segment.text.toLowerCase()
-    
-    // Generate caption based on actual content
-    if (promptAnalysis.isEmotional) {
-      if (/laugh|funny|haha/.test(segmentText)) return "That's hilarious"
-      if (/sad|cry/.test(segmentText)) return "Emotional moment"
-      if (/happy|excited|great/.test(segmentText)) return "Pure joy"
-      if (/wow|amazing|incredible/.test(segmentText)) return "Mind blown"
-    }
-    
-    if (promptAnalysis.isAction) {
-      if (/dance|dancing/.test(segmentText)) return "Dance moves"
-      if (/move|moving/.test(segmentText)) return "In motion"
-      if (/jump|jumping/.test(segmentText)) return "Action time"
-      if (/run|running/.test(segmentText)) return "On the move"
-    }
-    
-    if (promptAnalysis.isDialogue) {
-      if (/say|said/.test(segmentText)) return "Quote worthy"
-      if (/talk|talking/.test(segmentText)) return "Speaking truth"
-      if (/ask|asking/.test(segmentText)) return "Good question"
-    }
-    
-    // Use first few words of segment as caption
-    const words = segment.text.split(' ').slice(0, 4).join(' ')
-    return words.length > 25 ? words.substring(0, 25) : words
-  }
-
-  generateGenericCaption(promptAnalysis, index) {
-    const positions = ["Opening", "Middle", "Ending"]
-    const position = positions[index] || "Moment"
-    
-    if (promptAnalysis.isEmotional) {
-      return `${position} feels`
-    }
-    if (promptAnalysis.isAction) {
-      return `${position} action`
-    }
-    if (promptAnalysis.isDialogue) {
-      return `${position} words`
-    }
-    
-    return `${position} vibes`
-  }
-
-  extractTone(promptLower) {
-    if (/funny|comedy|laugh|hilarious/.test(promptLower)) return "humorous"
-    if (/sad|emotional|cry|touching/.test(promptLower)) return "emotional"
-    if (/exciting|action|energy/.test(promptLower)) return "energetic"
-    if (/calm|peaceful|relaxing/.test(promptLower)) return "calm"
-    return "neutral"
-  }
-
-  extractKeywords(promptLower) {
-    const commonWords = ["the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from", "up", "about", "into", "through", "during", "before", "after", "above", "below", "between", "among", "under", "over", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can", "shall"]
-    
-    return promptLower.split(/\s+/)
-      .filter(word => word.length > 3 && !commonWords.includes(word))
-      .slice(0, 5) // Take top 5 keywords
-  }
-
-  determineContentType(transcriptLower) {
-    if (/music|song|singing|dance/.test(transcriptLower)) return "musical"
-    if (/game|play|sport/.test(transcriptLower)) return "gaming"
-    if (/news|report|information/.test(transcriptLower)) return "informational"
-    if (/teach|learn|education/.test(transcriptLower)) return "educational"
-    if (/story|tell|narrative/.test(transcriptLower)) return "narrative"
-    return "general"
-  }
-
-  // Backwards compatibility
-  async analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration) {
-    return this.analyzeVideoContentWithPrompt(transcript, prompt, videoDuration)
+    return moments
   }
 
   async testConnection() {
