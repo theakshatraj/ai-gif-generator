@@ -39,12 +39,15 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 5000
+# Use Railway's PORT environment variable, fallback to 5000
+ENV PORT=${PORT:-5000}
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
+# Expose the port
+EXPOSE $PORT
+
+# Simplified health check that doesn't assume port
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Start the application
 CMD ["npm", "start"]
