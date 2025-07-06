@@ -1,20 +1,15 @@
 FROM node:18-slim
 
-# Install system dependencies
+# Install system dependencies (only what's needed)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    python3 \
-    python3-pip \
     curl \
     wget \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install latest yt-dlp (replaces ytdl-core)
-RUN pip3 install --no-cache-dir --upgrade yt-dlp
-
-# Verify installations
-RUN yt-dlp --version && ffmpeg -version
+# Verify ffmpeg installation
+RUN ffmpeg -version
 
 # Create app directory
 WORKDIR /app
@@ -39,15 +34,8 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
 # Switch to non-root user
 USER appuser
 
-# Use Railway's PORT environment variable, fallback to 5000
-ENV PORT=${PORT:-5000}
-
-# Expose the port
-EXPOSE $PORT
-
-# Simplified health check that doesn't assume port
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:${PORT}/health || exit 1
+# Expose port (Railway will set the PORT environment variable)
+EXPOSE 5000
 
 # Start the application
 CMD ["npm", "start"]
