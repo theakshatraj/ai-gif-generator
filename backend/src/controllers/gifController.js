@@ -10,8 +10,7 @@ export const generateGifs = async (req, res) => {
   const tempFiles = []
 
   try {
-    console.log("🚀 Starting Enhanced GIF generation process...")
-
+    console.log("🚀 Starting CONTEXT-AWARE GIF generation process...")
     const { prompt, youtubeUrl } = req.body
     const uploadedFile = req.file
 
@@ -85,18 +84,19 @@ export const generateGifs = async (req, res) => {
       })
     }
 
-    if (videoDuration > 600) { // 10 minutes
+    if (videoDuration > 600) {
+      // 10 minutes
       return res.status(400).json({
         success: false,
         error: "Video is too long (maximum 10 minutes allowed)",
       })
     }
 
-    // Enhanced AI analysis with better context
-    console.log("🤖 Analyzing content with enhanced AI context...")
-    const moments = await analyzeContentWithEnhancedContext(transcript, prompt, videoDuration)
+    // CONTEXT-AWARE AI analysis
+    console.log("🤖 Analyzing content with CONTEXT-AWARE AI...")
+    const moments = await analyzeContentWithContextAwareness(transcript, prompt, videoDuration)
 
-    console.log("🎬 Final moments to process:", JSON.stringify(moments, null, 2))
+    console.log("🎬 Final contextual moments to process:", JSON.stringify(moments, null, 2))
 
     if (!moments || moments.length === 0) {
       return res.status(400).json({
@@ -123,34 +123,33 @@ export const generateGifs = async (req, res) => {
       const moment = validMoments[i]
       console.log(`🎬 Processing GIF ${i + 1}/${validMoments.length}`)
       console.log(`⏱️ Time: ${moment.startTime}s - ${moment.endTime}s`)
-      console.log(`💬 Caption: ${moment.caption}`)
+      console.log(`💬 Contextual Caption: ${moment.caption}`)
 
       try {
-        // Create GIF with enhanced parameters
-        console.log(`🎨 Creating GIF ${i + 1} with enhanced processing...`)
+        console.log(`🎨 Creating GIF ${i + 1} with contextual processing...`)
         const gif = await gifService.createGif(videoPath, moment)
-        
+
         // Validate created GIF
         if (gif && gif.id && fs.existsSync(path.join(process.cwd(), "output", `${gif.id}.gif`))) {
           gifs.push(gif)
           processedMoments.push(moment)
-          console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
+          console.log(`✅ Contextual GIF ${i + 1} created successfully (${gif.size})`)
         } else {
           throw new Error("GIF file was not created properly")
         }
       } catch (error) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, error)
         errors.push(`GIF ${i + 1} (${moment.startTime}s-${moment.endTime}s): ${error.message}`)
-        
+
         // Try to create a fallback GIF with adjusted parameters
         try {
           console.log(`🔄 Attempting fallback GIF creation for moment ${i + 1}...`)
           const fallbackMoment = {
             ...moment,
             startTime: Math.max(0, moment.startTime - 0.5),
-            endTime: Math.min(videoDuration, moment.endTime + 0.5)
+            endTime: Math.min(videoDuration, moment.endTime + 0.5),
           }
-          
+
           const fallbackGif = await gifService.createGif(videoPath, fallbackMoment)
           if (fallbackGif && fallbackGif.id) {
             gifs.push(fallbackGif)
@@ -179,12 +178,13 @@ export const generateGifs = async (req, res) => {
 
     // Calculate success rate
     const successRate = ((gifs.length / validMoments.length) * 100).toFixed(1)
-
-    console.log(`🎉 Successfully generated ${gifs.length}/${validMoments.length} GIFs (${successRate}% success rate) in ${processingTime}s!`)
+    console.log(
+      `🎉 Successfully generated ${gifs.length}/${validMoments.length} CONTEXTUAL GIFs (${successRate}% success rate) in ${processingTime}s!`,
+    )
 
     res.json({
       success: true,
-      message: `Successfully generated ${gifs.length} GIFs`,
+      message: `Successfully generated ${gifs.length} contextual GIFs`,
       gifs: gifs.map((gif, index) => ({
         id: gif.id,
         caption: gif.caption,
@@ -207,185 +207,261 @@ export const generateGifs = async (req, res) => {
     })
   } catch (error) {
     console.error("❌ GIF generation failed:", error)
-
     // Clean up temporary files on error
     await cleanupTempFiles(tempFiles)
 
     res.status(500).json({
       success: false,
       error: error.message || "Failed to generate GIFs",
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
     })
   }
 }
 
-// Enhanced content analysis with better context
-async function analyzeContentWithEnhancedContext(transcript, prompt, videoDuration) {
+// CONTEXT-AWARE content analysis
+async function analyzeContentWithContextAwareness(transcript, prompt, videoDuration) {
   try {
-    // First, try the enhanced AI analysis
+    console.log("🎯 Starting CONTEXT-AWARE analysis...")
+    console.log(`🎯 Looking for "${prompt}" in video content...`)
+
+    // First, try the enhanced AI analysis with context awareness
     const aiMoments = await aiService.analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration)
-    
-    // Validate AI response quality
+
+    // Validate AI response quality with context awareness
     if (aiMoments && aiMoments.length > 0) {
-      const validAiMoments = aiMoments.filter(moment => 
-        moment.startTime >= 0 && 
-        moment.endTime <= videoDuration &&
-        moment.startTime < moment.endTime &&
-        moment.caption && moment.caption.trim().length > 0
+      const validAiMoments = aiMoments.filter(
+        (moment) =>
+          moment.startTime >= 0 &&
+          moment.endTime <= videoDuration &&
+          moment.startTime < moment.endTime &&
+          moment.caption &&
+          moment.caption.trim().length > 0 &&
+          // Additional context validation
+          isContextuallyRelevant(moment.caption, prompt, transcript),
       )
-      
+
       if (validAiMoments.length >= 2) {
-        console.log("✅ AI analysis successful with quality moments")
-        return validAiMoments.slice(0, 3) // Return top 3 moments
+        console.log("✅ Context-aware AI analysis successful")
+        console.log(`🎯 Generated contextual captions: ${validAiMoments.map((m) => m.caption).join(", ")}`)
+        return validAiMoments.slice(0, 3)
       }
     }
 
-    console.log("⚠️ AI analysis didn't provide quality moments, creating enhanced fallback...")
-    
+    console.log("⚠️ AI analysis didn't provide contextual moments, creating enhanced contextual fallback...")
+
     // Create enhanced fallback moments based on actual content
-    return createEnhancedFallbackMoments(transcript, prompt, videoDuration)
+    return createContextualFallbackMoments(transcript, prompt, videoDuration)
   } catch (error) {
-    console.error("❌ Enhanced content analysis failed:", error)
-    return createEnhancedFallbackMoments(transcript, prompt, videoDuration)
+    console.error("❌ Context-aware analysis failed:", error)
+    return createContextualFallbackMoments(transcript, prompt, videoDuration)
   }
 }
 
-// Enhanced fallback moment creation
-function createEnhancedFallbackMoments(transcript, prompt, videoDuration) {
+// Check if caption is contextually relevant
+function isContextuallyRelevant(caption, prompt, transcript) {
+  const captionLower = caption.toLowerCase()
+  const promptLower = prompt.toLowerCase()
+  const transcriptLower = transcript.text.toLowerCase()
+
+  // Check if caption relates to prompt
+  const promptWords = promptLower.split(" ")
+  const hasPromptRelation = promptWords.some((word) => word.length > 2 && captionLower.includes(word))
+
+  // Check if caption relates to actual content
+  const captionWords = captionLower.split(" ")
+  const hasContentRelation = captionWords.some((word) => word.length > 3 && transcriptLower.includes(word))
+
+  return hasPromptRelation || hasContentRelation
+}
+
+// Enhanced contextual fallback moment creation
+function createContextualFallbackMoments(transcript, prompt, videoDuration) {
   const moments = []
   const promptLower = prompt.toLowerCase()
-  
-  // Analyze transcript for key moments
+
+  console.log(`🎯 Creating contextual fallback for prompt: "${prompt}"`)
+
+  // Analyze transcript for key moments that match the prompt
   const segments = transcript.segments || []
-  const hasDetailedAnalysis = segments.some(seg => seg.frameAnalysis)
-  
-  // Create contextual captions based on prompt
-  const contextualCaptions = generateContextualCaptions(promptLower, hasDetailedAnalysis)
-  
+  const contextualCaptions = extractPromptRelevantCaptions(transcript, prompt)
+
+  console.log(`🎯 Extracted contextual captions: ${contextualCaptions.join(", ")}`)
+
   if (videoDuration >= 9) {
     // For longer videos, spread moments strategically
     const positions = [
-      { start: 0, priority: 'opening' },
-      { start: Math.floor(videoDuration * 0.4), priority: 'middle' },
-      { start: Math.max(0, videoDuration - 4), priority: 'ending' }
+      { start: 0, priority: "opening" },
+      { start: Math.floor(videoDuration * 0.4), priority: "middle" },
+      { start: Math.max(0, videoDuration - 4), priority: "ending" },
     ]
-    
+
     positions.forEach((pos, index) => {
       const duration = Math.min(3, videoDuration - pos.start)
       const relevantSegment = findRelevantSegment(segments, pos.start, pos.start + duration)
-      
+
       moments.push({
         startTime: pos.start,
         endTime: pos.start + duration,
-        caption: contextualCaptions[index] || `${pos.priority} moment`,
-        reason: `Strategic ${pos.priority} moment with ${relevantSegment ? 'content analysis' : 'timeline positioning'}`,
-        confidence: relevantSegment ? 'high' : 'medium'
+        caption: contextualCaptions[index] || generateContextualCaption(relevantSegment, prompt, pos.priority),
+        reason: `Contextual ${pos.priority} moment matching "${prompt}"`,
+        confidence: relevantSegment ? "high" : "medium",
       })
     })
   } else if (videoDuration >= 6) {
     // For medium videos, create overlapping moments
     for (let i = 0; i < 3; i++) {
-      const start = Math.floor(i * (videoDuration - 2) / 2)
+      const start = Math.floor((i * (videoDuration - 2)) / 2)
       const duration = Math.min(2, videoDuration - start)
-      
+      const relevantSegment = findRelevantSegment(segments, start, start + duration)
+
       moments.push({
         startTime: start,
         endTime: start + duration,
-        caption: contextualCaptions[i] || `Key moment ${i + 1}`,
-        reason: `Content-aware moment based on video analysis`,
-        confidence: 'medium'
+        caption: contextualCaptions[i] || generateContextualCaption(relevantSegment, prompt, `moment ${i + 1}`),
+        reason: `Contextual moment based on "${prompt}" theme`,
+        confidence: "medium",
       })
     }
   } else {
     // For short videos, create strategic segments
     const segmentDuration = Math.max(1.5, videoDuration / 3)
     for (let i = 0; i < 3; i++) {
-      const start = Math.floor(i * videoDuration / 4)
+      const start = Math.floor((i * videoDuration) / 4)
       const duration = Math.min(segmentDuration, videoDuration - start)
-      
+      const relevantSegment = findRelevantSegment(segments, start, start + duration)
+
       moments.push({
         startTime: start,
         endTime: start + duration,
-        caption: contextualCaptions[i] || `Quick moment ${i + 1}`,
-        reason: `Short video segment optimization`,
-        confidence: 'medium'
+        caption: contextualCaptions[i] || generateContextualCaption(relevantSegment, prompt, `quick ${i + 1}`),
+        reason: `Short video contextual segment for "${prompt}"`,
+        confidence: "medium",
       })
     }
   }
-  
-  console.log(`📊 Created ${moments.length} enhanced fallback moments`)
+
+  console.log(`📊 Created ${moments.length} contextual fallback moments`)
   return moments
 }
 
-// Generate contextual captions based on prompt analysis
-function generateContextualCaptions(promptLower, hasDetailedAnalysis) {
+// Extract captions that are relevant to the prompt from actual content
+function extractPromptRelevantCaptions(transcript, prompt) {
   const captions = []
-  
-  // Analyze prompt for context
-  if (promptLower.includes('funny') || promptLower.includes('laugh') || promptLower.includes('humor')) {
-    captions.push("This is hilarious", "Can't stop laughing", "Comedy gold")
-  } else if (promptLower.includes('dance') || promptLower.includes('music') || promptLower.includes('beat')) {
-    captions.push("When the beat drops", "Dance vibes", "Music hits different")
-  } else if (promptLower.includes('reaction') || promptLower.includes('respond')) {
-    captions.push("That reaction", "Mood", "Relatable moment")
-  } else if (promptLower.includes('epic') || promptLower.includes('amazing') || promptLower.includes('awesome')) {
-    captions.push("Epic moment", "This is amazing", "Legendary")
-  } else if (promptLower.includes('cute') || promptLower.includes('adorable') || promptLower.includes('sweet')) {
-    captions.push("Too cute", "Adorable", "Sweet moment")
-  } else if (promptLower.includes('fail') || promptLower.includes('mistake') || promptLower.includes('oops')) {
-    captions.push("Epic fail", "Oops moment", "That didn't work")
-  } else if (promptLower.includes('surprise') || promptLower.includes('shock') || promptLower.includes('unexpected')) {
-    captions.push("Plot twist", "Unexpected", "Surprise!")
-  } else {
-    // Generic engaging captions
-    captions.push("Big mood", "That's a vibe", "Main character energy")
+  const promptLower = prompt.toLowerCase()
+  const promptWords = promptLower.split(" ").filter((word) => word.length > 2)
+
+  // Strategy 1: Look for exact matches in transcript
+  const segments = transcript.segments || []
+  segments.forEach((segment) => {
+    const segmentLower = segment.text.toLowerCase()
+
+    // Check if segment contains prompt words
+    const hasPromptWord = promptWords.some((word) => segmentLower.includes(word))
+    if (hasPromptWord) {
+      // Extract relevant phrase
+      const words = segment.text.split(" ")
+      if (words.length <= 4) {
+        captions.push(segment.text)
+      } else {
+        // Find the prompt word and extract context around it
+        const promptWordIndex = words.findIndex((word) =>
+          promptWords.some((pWord) => word.toLowerCase().includes(pWord)),
+        )
+        if (promptWordIndex !== -1) {
+          const start = Math.max(0, promptWordIndex - 1)
+          const end = Math.min(words.length, promptWordIndex + 3)
+          captions.push(words.slice(start, end).join(" "))
+        }
+      }
+    }
+  })
+
+  // Strategy 2: Create thematic variations based on prompt
+  if (captions.length < 3) {
+    if (promptLower.includes("perfect")) {
+      captions.push("Perfect", "It was perfect", "Perfect moment")
+    } else if (promptLower.includes("amazing")) {
+      captions.push("Amazing", "So amazing", "Amazing moment")
+    } else if (promptLower.includes("funny")) {
+      captions.push("So funny", "Hilarious", "That's funny")
+    } else if (promptLower.includes("great")) {
+      captions.push("Great", "So great", "Great moment")
+    } else {
+      // Use the prompt itself as base
+      captions.push(prompt, `${prompt} vibes`, `${prompt} moment`)
+    }
   }
-  
-  // Ensure we have at least 3 captions
-  while (captions.length < 3) {
-    captions.push("Perfect moment", "This hits", "Mood exactly")
+
+  // Ensure we have exactly 3 unique captions
+  const uniqueCaptions = [...new Set(captions)]
+  while (uniqueCaptions.length < 3) {
+    uniqueCaptions.push(`${prompt} ${uniqueCaptions.length + 1}`)
   }
-  
-  return captions
+
+  return uniqueCaptions.slice(0, 3)
+}
+
+// Generate contextual caption based on segment and prompt
+function generateContextualCaption(segment, prompt, context) {
+  if (segment && segment.text) {
+    const segmentWords = segment.text.split(" ")
+    const promptLower = prompt.toLowerCase()
+
+    // If segment is short, use it directly
+    if (segmentWords.length <= 3) {
+      return segment.text
+    }
+
+    // Try to combine segment content with prompt theme
+    if (promptLower.includes("perfect") && segment.text.toLowerCase().includes("perfect")) {
+      return segment.text.split(" ").find((word) => word.toLowerCase().includes("perfect")) || "Perfect"
+    }
+
+    // Extract meaningful phrase from segment
+    return segmentWords.slice(0, 3).join(" ")
+  }
+
+  return `${prompt} ${context}`
 }
 
 // Find relevant segment for a time range
 function findRelevantSegment(segments, startTime, endTime) {
-  return segments.find(segment => 
-    (segment.start <= startTime && segment.end >= endTime) ||
-    (segment.start >= startTime && segment.start < endTime) ||
-    (segment.end > startTime && segment.end <= endTime)
+  return segments.find(
+    (segment) =>
+      (segment.start <= startTime && segment.end >= endTime) ||
+      (segment.start >= startTime && segment.start < endTime) ||
+      (segment.end > startTime && segment.end <= endTime),
   )
 }
 
 // Validate and filter moments
 function validateAndFilterMoments(moments, videoDuration) {
-  return moments.filter(moment => {
+  return moments.filter((moment) => {
     // Basic validation
-    if (typeof moment.startTime !== 'number' || typeof moment.endTime !== 'number') {
+    if (typeof moment.startTime !== "number" || typeof moment.endTime !== "number") {
       console.log(`⚠️ Invalid moment timing: ${JSON.stringify(moment)}`)
       return false
     }
-    
+
     // Time range validation
     if (moment.startTime < 0 || moment.endTime > videoDuration) {
       console.log(`⚠️ Moment out of video range: ${moment.startTime}s-${moment.endTime}s`)
       return false
     }
-    
+
     // Duration validation
     const duration = moment.endTime - moment.startTime
     if (duration < 1 || duration > 5) {
       console.log(`⚠️ Invalid moment duration: ${duration}s`)
       return false
     }
-    
+
     // Caption validation
     if (!moment.caption || moment.caption.trim().length === 0) {
       console.log(`⚠️ Missing caption for moment: ${moment.startTime}s-${moment.endTime}s`)
       return false
     }
-    
+
     return true
   })
 }
@@ -402,7 +478,7 @@ async function cleanupTempFiles(tempFiles) {
       console.warn(`⚠️ Failed to cleanup ${filePath}:`, error.message)
     }
   })
-  
+
   await Promise.allSettled(cleanupPromises)
 }
 
