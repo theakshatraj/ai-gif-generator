@@ -40,11 +40,22 @@ RUN mkdir -p /app/uploads /app/output /app/temp /app/assets /app/assets/fonts &&
     chmod -R 755 /app/uploads /app/output /app/temp
 
 # Create non-root user for security
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
-    chown -R appuser:appgroup /app
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# Create cache directory in /tmp (writable by appuser)
+RUN mkdir -p /tmp/yt-dlp-cache && \
+    chmod -R 777 /tmp/yt-dlp-cache
+
+# Change ownership of app files to appuser
+RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV TMPDIR=/tmp
+ENV YT_DLP_CACHE_DIR=/tmp/yt-dlp-cache
 
 # Expose port (Railway will set the PORT environment variable)
 EXPOSE 5000

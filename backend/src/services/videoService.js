@@ -36,19 +36,20 @@ class VideoService {
     const videoId = uuidv4();
     const videoPath = path.join(this.tempDir, `${videoId}.mp4`);
     
-    console.log('⬇️ Downloading video with enhanced parameters...');
+    console.log('⬇️ Downloading video with enhanced anti-bot parameters...');
     console.log('🔗 URL:', youtubeUrl);
 
-    // Enhanced yt-dlp command with anti-bot measures
+    // Enhanced yt-dlp command with anti-bot measures and proper cache handling
     const ytDlpCommand = [
       'yt-dlp',
-      '-f', 'worst[ext=mp4]/worst[ext=webm]/worst', // Try lower quality first
+      '--format', 'best[height<=720]/best[height<=480]/worst[ext=mp4]/worst[ext=webm]/worst',
       '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
       '--add-header', 'Accept-Language:en-US,en;q=0.9',
       '--add-header', 'Accept-Encoding:gzip, deflate, br',
       '--add-header', 'DNT:1',
       '--add-header', 'Connection:keep-alive',
       '--add-header', 'Upgrade-Insecure-Requests:1',
+      '--referer', 'https://www.youtube.com/',
       '--extractor-retries', '3',
       '--fragment-retries', '3',
       '--retry-sleep', '2',
@@ -56,67 +57,141 @@ class VideoService {
       '--geo-bypass',
       '--sleep-interval', '1',
       '--max-sleep-interval', '5',
-      '-o', videoPath,
+      '--cache-dir', '/tmp/yt-dlp-cache',
+      '--no-warnings',
+      '--ignore-errors',
+      '--max-filesize', '100M',
+      '--socket-timeout', '30',
+      '--output', videoPath,
       youtubeUrl
     ];
 
     // Add delay to avoid rate limiting
     const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-    await delay(2000);
+    await delay(Math.random() * 3000 + 2000); // Random delay 2-5 seconds
 
     try {
       const { stdout, stderr } = await execAsync(ytDlpCommand.join(' '), {
-        timeout: 120000 // 2 minute timeout
+        timeout: 120000, // 2 minute timeout
+        env: {
+          ...process.env,
+          TMPDIR: '/tmp',
+          YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
+        }
       });
       
       if (stderr && stderr.includes('ERROR')) {
-        throw new Error(stderr);
+        console.log('⚠️ stderr contains error, but checking if file was created...');
+        console.log('stderr:', stderr);
       }
       
-      console.log('✅ Video downloaded successfully');
+      // Check if file was actually created
+      if (fs.existsSync(videoPath)) {
+        const stats = fs.statSync(videoPath);
+        if (stats.size > 0) {
+          console.log('✅ Video downloaded successfully');
+          console.log(`📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+          return { 
+            videoPath, 
+            videoInfo: await this.getVideoInfo(videoPath) 
+          };
+        }
+      }
+      
+      throw new Error('Video file was not created or is empty');
       
     } catch (downloadError) {
-      console.log('❌ First download attempt failed, trying alternative...');
+      console.log('❌ First download attempt failed, trying fallback methods...');
+      console.log('Error:', downloadError.message);
       
-      // Retry with even simpler parameters
-      const fallbackCommand = [
-        'yt-dlp',
-        '-f', '18/worst', // 360p MP4 or worst available
-        '--no-check-certificate',
-        '--geo-bypass',
-        '--extractor-retries', '1',
-        '--socket-timeout', '30',
-        '-o', videoPath,
-        youtubeUrl
-      ];
-      
-      await delay(5000); // Wait 5 seconds before retry
-      
-      try {
-        await execAsync(fallbackCommand.join(' '), { timeout: 90000 });
-        console.log('✅ Video downloaded on retry');
-      } catch (retryError) {
-        console.error('❌ All download attempts failed:', retryError.message);
-        throw new Error(`Failed to download video: ${retryError.message}`);
+      // Clean up failed file
+      if (fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
       }
-    }
+      
+      // Try multiple fallback strategies
+      const fallbackStrategies = [
+        {
+          name: 'Simple format',
+          command: [
+            'yt-dlp',
+            '--format', 'worst[ext=mp4]/worst',
+            '--no-check-certificate',
+            '--geo-bypass',
+            '--cache-dir', '/tmp/yt-dlp-cache',
+            '--no-warnings',
+            '--ignore-errors',
+            '--max-filesize', '50M',
+            '--socket-timeout', '30',
+            '--output', videoPath,
+            youtubeUrl
+          ]
+        },
+        {
+          name: 'Generic extractor',
+          command: [
+            'yt-dlp',
+            '--format', 'best[height<=480]/worst',
+            '--force-generic-extractor',
+            '--no-check-certificate',
+            '--cache-dir', '/tmp/yt-dlp-cache',
+            '--no-warnings',
+            '--ignore-errors',
+            '--output', videoPath,
+            youtubeUrl
+          ]
+        },
+        {
+          name: 'Minimal options',
+          command: [
+            'yt-dlp',
+            '--format', 'worst',
+            '--cache-dir', '/tmp/yt-dlp-cache',
+            '--output', videoPath,
+            youtubeUrl
+          ]
+        }
+      ];
 
-    // Verify file was created and is not empty
-    if (!fs.existsSync(videoPath)) {
-      throw new Error("Video file was not created");
+      for (const strategy of fallbackStrategies) {
+        try {
+          console.log(`🔄 Trying fallback strategy: ${strategy.name}`);
+          await delay(5000); // Wait 5 seconds between attempts
+          
+          await execAsync(strategy.command.join(' '), { 
+            timeout: 90000,
+            env: {
+              ...process.env,
+              TMPDIR: '/tmp',
+              YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
+            }
+          });
+          
+          // Check if file was created
+          if (fs.existsSync(videoPath)) {
+            const stats = fs.statSync(videoPath);
+            if (stats.size > 0) {
+              console.log(`✅ Video downloaded successfully with ${strategy.name}`);
+              console.log(`📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+              return { 
+                videoPath, 
+                videoInfo: await this.getVideoInfo(videoPath) 
+              };
+            }
+          }
+          
+        } catch (strategyError) {
+          console.log(`❌ ${strategy.name} failed:`, strategyError.message);
+          // Clean up failed file
+          if (fs.existsSync(videoPath)) {
+            fs.unlinkSync(videoPath);
+          }
+          continue;
+        }
+      }
+      
+      throw new Error(`All download attempts failed. The video might be private, geo-blocked, or require authentication. Last error: ${downloadError.message}`);
     }
-
-    const stats = fs.statSync(videoPath);
-    if (stats.size === 0) {
-      throw new Error("Downloaded video file is empty");
-    }
-
-    console.log(`📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-    
-    return { 
-      videoPath, 
-      videoInfo: await this.getVideoInfo(videoPath) 
-    };
   }
 
   async downloadYoutubeCaptions(youtubeUrl) {
@@ -133,7 +208,7 @@ class VideoService {
 
       for (const lang of languages) {
         try {
-          // Enhanced caption download command
+          // Enhanced caption download command with proper cache handling
           const command = [
             'yt-dlp',
             '--write-subs',
@@ -143,14 +218,23 @@ class VideoService {
             '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
             '--no-check-certificate',
             '--geo-bypass',
+            '--cache-dir', '/tmp/yt-dlp-cache',
+            '--no-warnings',
+            '--ignore-errors',
             '--output', `"${captionPath.replace(".vtt", "")}"`,
             `"${youtubeUrl}"`
           ].join(' ');
 
           console.log(`🔧 Trying captions in language: ${lang}`);
-          console.log(`🔧 Command: ${command}`);
 
-          const { stdout, stderr } = await execAsync(command, { timeout: 60000 });
+          const { stdout, stderr } = await execAsync(command, { 
+            timeout: 60000,
+            env: {
+              ...process.env,
+              TMPDIR: '/tmp',
+              YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
+            }
+          });
 
           if (stdout) {
             console.log("📤 yt-dlp captions stdout:", stdout);
