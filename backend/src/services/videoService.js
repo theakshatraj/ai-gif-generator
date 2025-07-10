@@ -39,39 +39,15 @@ class VideoService {
     console.log('⬇️ Downloading video with enhanced anti-bot parameters...');
     console.log('🔗 URL:', youtubeUrl);
 
-    // Enhanced yt-dlp command with anti-bot measures and proper cache handling
-    const ytDlpCommand = [
-      'yt-dlp',
-      '--format', 'best[height<=720]/best[height<=480]/worst[ext=mp4]/worst[ext=webm]/worst',
-      '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-      '--add-header', 'Accept-Language:en-US,en;q=0.9',
-      '--add-header', 'Accept-Encoding:gzip, deflate, br',
-      '--add-header', 'DNT:1',
-      '--add-header', 'Connection:keep-alive',
-      '--add-header', 'Upgrade-Insecure-Requests:1',
-      '--referer', 'https://www.youtube.com/',
-      '--extractor-retries', '3',
-      '--fragment-retries', '3',
-      '--retry-sleep', '2',
-      '--no-check-certificate',
-      '--geo-bypass',
-      '--sleep-interval', '1',
-      '--max-sleep-interval', '5',
-      '--cache-dir', '/tmp/yt-dlp-cache',
-      '--no-warnings',
-      '--ignore-errors',
-      '--max-filesize', '100M',
-      '--socket-timeout', '30',
-      '--output', videoPath,
-      youtubeUrl
-    ];
+    // Fixed yt-dlp command with proper quoting
+    const ytDlpCommand = `yt-dlp --format "best[height<=720]/best[height<=480]/worst[ext=mp4]/worst[ext=webm]/worst" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --add-header "Accept-Language:en-US,en;q=0.9" --add-header "Accept-Encoding:gzip, deflate, br" --add-header "DNT:1" --add-header "Connection:keep-alive" --add-header "Upgrade-Insecure-Requests:1" --referer "https://www.youtube.com/" --extractor-retries 3 --fragment-retries 3 --retry-sleep 2 --no-check-certificate --geo-bypass --sleep-interval 1 --max-sleep-interval 5 --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --max-filesize 100M --socket-timeout 30 --output "${videoPath}" "${youtubeUrl}"`;
 
     // Add delay to avoid rate limiting
     const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     await delay(Math.random() * 3000 + 2000); // Random delay 2-5 seconds
 
     try {
-      const { stdout, stderr } = await execAsync(ytDlpCommand.join(' '), {
+      const { stdout, stderr } = await execAsync(ytDlpCommand, {
         timeout: 120000, // 2 minute timeout
         env: {
           ...process.env,
@@ -113,43 +89,15 @@ class VideoService {
       const fallbackStrategies = [
         {
           name: 'Simple format',
-          command: [
-            'yt-dlp',
-            '--format', 'worst[ext=mp4]/worst',
-            '--no-check-certificate',
-            '--geo-bypass',
-            '--cache-dir', '/tmp/yt-dlp-cache',
-            '--no-warnings',
-            '--ignore-errors',
-            '--max-filesize', '50M',
-            '--socket-timeout', '30',
-            '--output', videoPath,
-            youtubeUrl
-          ]
+          command: `yt-dlp --format "worst[ext=mp4]/worst" --no-check-certificate --geo-bypass --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --max-filesize 50M --socket-timeout 30 --output "${videoPath}" "${youtubeUrl}"`
         },
         {
           name: 'Generic extractor',
-          command: [
-            'yt-dlp',
-            '--format', 'best[height<=480]/worst',
-            '--force-generic-extractor',
-            '--no-check-certificate',
-            '--cache-dir', '/tmp/yt-dlp-cache',
-            '--no-warnings',
-            '--ignore-errors',
-            '--output', videoPath,
-            youtubeUrl
-          ]
+          command: `yt-dlp --format "best[height<=480]/worst" --force-generic-extractor --no-check-certificate --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --output "${videoPath}" "${youtubeUrl}"`
         },
         {
           name: 'Minimal options',
-          command: [
-            'yt-dlp',
-            '--format', 'worst',
-            '--cache-dir', '/tmp/yt-dlp-cache',
-            '--output', videoPath,
-            youtubeUrl
-          ]
+          command: `yt-dlp --format "worst" --cache-dir "/tmp/yt-dlp-cache" --output "${videoPath}" "${youtubeUrl}"`
         }
       ];
 
@@ -158,7 +106,7 @@ class VideoService {
           console.log(`🔄 Trying fallback strategy: ${strategy.name}`);
           await delay(5000); // Wait 5 seconds between attempts
           
-          await execAsync(strategy.command.join(' '), { 
+          await execAsync(strategy.command, { 
             timeout: 90000,
             env: {
               ...process.env,
@@ -208,22 +156,8 @@ class VideoService {
 
       for (const lang of languages) {
         try {
-          // Enhanced caption download command with proper cache handling
-          const command = [
-            'yt-dlp',
-            '--write-subs',
-            '--sub-langs', `"${lang}"`,
-            '--sub-format', 'vtt',
-            '--skip-download',
-            '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-            '--no-check-certificate',
-            '--geo-bypass',
-            '--cache-dir', '/tmp/yt-dlp-cache',
-            '--no-warnings',
-            '--ignore-errors',
-            '--output', `"${captionPath.replace(".vtt", "")}"`,
-            `"${youtubeUrl}"`
-          ].join(' ');
+          // Fixed caption download command with proper quoting
+          const command = `yt-dlp --write-subs --sub-langs "${lang}" --sub-format vtt --skip-download --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --no-check-certificate --geo-bypass --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --output "${captionPath.replace(".vtt", "")}" "${youtubeUrl}"`;
 
           console.log(`🔧 Trying captions in language: ${lang}`);
 
