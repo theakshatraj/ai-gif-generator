@@ -9,78 +9,6 @@ class VideoAnalysisService {
   constructor() {
     this.ffmpegPath = "ffmpeg";  // ✅ Use system ffmpeg
     this.tempDir = path.join(process.cwd(), "temp");
-    
-    // Ensure temp directory exists
-    if (!fs.existsSync(this.tempDir)) {
-      fs.mkdirSync(this.tempDir, { recursive: true });
-    }
-  }
-
-  // 📥 NEW METHOD: Download video from YouTube
-  async downloadFromYoutube(url, outputPath = null) {
-    try {
-      console.log("📥 Downloading video from YouTube...");
-      console.log("🔗 URL:", url);
-
-      // Generate output path if not provided
-      if (!outputPath) {
-        const timestamp = Date.now();
-        outputPath = path.join(this.tempDir, `youtube_video_${timestamp}.%(ext)s`);
-      }
-
-      // Use yt-dlp to download the video
-      // Format: best quality MP4 or fallback to best available
-      const command = `yt-dlp -f "best[ext=mp4]/best" -o "${outputPath}" "${url}"`;
-      
-      console.log("🚀 Executing:", command);
-      const { stdout, stderr } = await execAsync(command, { timeout: 300000 }); // 5 minutes timeout
-      
-      // Find the actual downloaded file (yt-dlp might change the extension)
-      const dir = path.dirname(outputPath);
-      const baseName = path.basename(outputPath, path.extname(outputPath));
-      const files = fs.readdirSync(dir).filter(f => f.startsWith(baseName.replace('.%(ext)s', '')));
-      
-      if (files.length === 0) {
-        throw new Error("Downloaded file not found");
-      }
-
-      const downloadedFile = path.join(dir, files[0]);
-      
-      console.log("✅ Video downloaded successfully");
-      console.log("📁 File location:", downloadedFile);
-      
-      return downloadedFile;
-    } catch (error) {
-      console.error("❌ YouTube download failed:", error);
-      throw new Error(`YouTube download failed: ${error.message}`);
-    }
-  }
-
-  // 📊 Get video duration and metadata
-  async getVideoMetadata(videoPath) {
-    try {
-      console.log("📊 Getting video metadata...");
-      
-      const command = `${this.ffmpegPath} -i "${videoPath}" -f null - 2>&1`;
-      const { stdout, stderr } = await execAsync(command);
-      
-      // Parse duration from FFmpeg output
-      const durationMatch = stderr.match(/Duration: (\d{2}):(\d{2}):(\d{2}.\d{2})/);
-      if (durationMatch) {
-        const hours = parseInt(durationMatch[1]);
-        const minutes = parseInt(durationMatch[2]);
-        const seconds = parseFloat(durationMatch[3]);
-        const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-        
-        console.log(`⏱️ Video duration: ${totalSeconds.toFixed(2)} seconds`);
-        return { duration: totalSeconds };
-      }
-      
-      throw new Error("Could not parse video duration");
-    } catch (error) {
-      console.error("❌ Failed to get video metadata:", error);
-      throw error;
-    }
   }
 
   async extractFramesForAnalysis(videoPath, videoDuration) {
@@ -257,18 +185,6 @@ class VideoAnalysisService {
     }
   }
 
-  // 🗑️ Clean up downloaded video files
-  cleanupVideo(videoPath) {
-    try {
-      if (fs.existsSync(videoPath)) {
-        fs.unlinkSync(videoPath);
-        console.log("🗑️ Cleaned up downloaded video");
-      }
-    } catch (error) {
-      console.error("❌ Failed to cleanup video:", error);
-    }
-  }
-
   // Detect scene changes in video
   async detectSceneChanges(videoPath, videoDuration) {
     try {
@@ -304,5 +220,6 @@ class VideoAnalysisService {
     }
   }
 }
+
 
 export default new VideoAnalysisService();
