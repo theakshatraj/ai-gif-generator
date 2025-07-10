@@ -35,16 +35,24 @@ RUN npm cache clean --force
 # Copy application code
 COPY . .
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /app/uploads /app/output /app/temp /app/assets /app/assets/fonts && \
-    chmod -R 755 /app/uploads /app/output /app/temp
+# Create non-root user first
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
-# Create non-root user for security
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/uploads /app/output /app/temp /app/assets /app/assets/fonts /app/cache && \
+    chmod -R 755 /app/uploads /app/output /app/temp /app/cache && \
     chown -R appuser:appgroup /app
+
+# Create a writable home directory for the user
+RUN mkdir -p /home/appuser && \
+    chown -R appuser:appgroup /home/appuser
 
 # Switch to non-root user
 USER appuser
+
+# Set environment variables for yt-dlp
+ENV PYTHONPATH="/opt/venv/lib/python3.11/site-packages"
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Expose port (Railway will set the PORT environment variable)
 EXPOSE 5000

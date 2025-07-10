@@ -1,4 +1,4 @@
-import fs from "fs/promises"
+import fs from "fs"
 import path from "path"
 import videoService from "../services/videoService.js"
 import videoAnalysisService from "../services/videoAnalysisService.js"
@@ -11,6 +11,7 @@ export const generateGifs = async (req, res) => {
 
   try {
     console.log("🚀 Starting GIF generation process...")
+
     const { prompt, youtubeUrl } = req.body
     const uploadedFile = req.file
 
@@ -18,10 +19,10 @@ export const generateGifs = async (req, res) => {
     console.log("🎥 YouTube URL:", youtubeUrl)
     console.log("📁 Uploaded file:", uploadedFile?.filename)
 
-    // Test AI service connection (supports both OpenRouter and OpenAI)
+    // Test OpenRouter connection first
     const connectionTest = await aiService.testConnection()
     if (!connectionTest) {
-      console.log("⚠️ AI service connection failed, will use fallback methods")
+      console.log("⚠️ OpenRouter connection failed, will use fallback methods")
     }
 
     let videoPath
@@ -30,56 +31,21 @@ export const generateGifs = async (req, res) => {
 
     if (youtubeUrl) {
       console.log("📥 Downloading from YouTube...")
+      const result = await videoService.downloadFromYoutube(youtubeUrl)
+      videoPath = result.videoPath
+      videoInfo = result.videoInfo
+      tempFiles.push(videoPath)
 
+      // Try YouTube captions first
+      console.log("📝 Downloading YouTube captions...")
       try {
-        const result = await videoService.downloadFromYoutube(youtubeUrl)
-        videoPath = result.videoPath
-        videoInfo = result.videoInfo
-        tempFiles.push(videoPath)
-
-        // Try YouTube captions first
-        console.log("📝 Downloading YouTube captions...")
-        try {
-          transcript = await videoService.downloadYoutubeCaptions(youtubeUrl)
-          console.log("✅ YouTube captions downloaded successfully")
-          console.log(`📝 Caption preview: ${transcript.text.substring(0, 200)}...`)
-        } catch (captionError) {
-          console.log("⚠️ YouTube captions not available, analyzing video content...")
-          transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
-        }
-      } catch (downloadError) {
-        console.error("❌ YouTube download failed:", downloadError)
-
-        // Provide helpful error message based on Railway environment
-        let errorMessage = "Failed to download video from YouTube"
-        let suggestions = []
-
-        if (downloadError.message.includes("Sign in to confirm")) {
-          errorMessage = "YouTube is blocking the download due to bot detection"
-          suggestions = [
-            "Make sure YTDLP_COOKIES environment variable is set in Railway",
-            "Try again in a few minutes",
-            "The video might be age-restricted or require authentication",
-            "Try uploading the video file directly instead",
-          ]
-        } else if (downloadError.message.includes("Video unavailable")) {
-          errorMessage = "Video is unavailable, private, or has been removed"
-          suggestions = ["Check if the video URL is correct and publicly accessible"]
-        } else if (downloadError.message.includes("timeout")) {
-          errorMessage = "Download timeout - the video might be too long or connection is slow"
-          suggestions = ["Try again with a shorter video", "Check your internet connection"]
-        }
-
-        return res.status(400).json({
-          success: false,
-          error: errorMessage,
-          details: downloadError.message,
-          suggestions,
-          railway: {
-            cookiesConfigured: !!process.env.YTDLP_COOKIES,
-            environment: process.env.RAILWAY_ENVIRONMENT_NAME,
-          },
-        })
+        transcript = await videoService.downloadYoutubeCaptions(youtubeUrl)
+        console.log("✅ YouTube captions downloaded successfully")
+        console.log(`📝 Caption preview: ${transcript.text.substring(0, 200)}...`)
+      } catch (captionError) {
+        console.log("⚠️ YouTube captions not available, analyzing video content...")
+        // Use video analysis instead of generic fallback
+        transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
       }
     } else if (uploadedFile) {
       console.log("📁 Using uploaded file...")
@@ -131,6 +97,7 @@ export const generateGifs = async (req, res) => {
         console.log(`🎨 Creating GIF ${i + 1} directly from video...`)
         const gif = await gifService.createGif(videoPath, moment)
         gifs.push(gif)
+
         console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
       } catch (error) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, error)
@@ -141,7 +108,16 @@ export const generateGifs = async (req, res) => {
 
     // Clean up temporary files
     console.log("🗑️ Cleaning up temporary files...")
-    await videoService.cleanupTempFiles(tempFiles)
+    for (const tempFile of tempFiles) {
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile)
+          console.log(`🗑️ Cleaned up: ${path.basename(tempFile)}`)
+        }
+      } catch (error) {
+        console.error(`❌ Failed to clean up ${tempFile}:`, error)
+      }
+    }
 
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2)
 
@@ -171,23 +147,24 @@ export const generateGifs = async (req, res) => {
       videoInfo,
       captionSource: youtubeUrl ? "YouTube Captions + Video Analysis" : "Video Content Analysis",
       errors: errors.length > 0 ? errors : undefined,
-      railway: {
-        environment: process.env.RAILWAY_ENVIRONMENT_NAME,
-        deploymentId: process.env.RAILWAY_DEPLOYMENT_ID,
-      },
     })
   } catch (error) {
     console.error("❌ GIF generation failed:", error)
 
     // Clean up temporary files on error
-    await videoService.cleanupTempFiles(tempFiles)
+    for (const tempFile of tempFiles) {
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile)
+        }
+      } catch (cleanupError) {
+        console.error(`❌ Failed to clean up ${tempFile}:`, cleanupError)
+      }
+    }
 
     res.status(500).json({
       success: false,
       error: error.message || "Failed to generate GIFs",
-      railway: {
-        environment: process.env.RAILWAY_ENVIRONMENT_NAME,
-      },
     })
   }
 }
@@ -195,16 +172,11 @@ export const generateGifs = async (req, res) => {
 export const getGif = async (req, res) => {
   try {
     const { id } = req.params
-    // Use environment variable for output directory
-    const outputDir = process.env.OUTPUT_DIR || path.join(process.cwd(), "output")
-    const gifPath = path.join(outputDir, `${id}.gif`)
+    const gifPath = path.join(process.cwd(), "output", `${id}.gif`)
 
     console.log(`📁 Looking for GIF: ${gifPath}`)
 
-    // Use async fs to check if file exists
-    try {
-      await fs.access(gifPath)
-    } catch {
+    if (!fs.existsSync(gifPath)) {
       console.log(`❌ GIF not found: ${gifPath}`)
       return res.status(404).json({
         success: false,
@@ -212,7 +184,7 @@ export const getGif = async (req, res) => {
       })
     }
 
-    const stats = await fs.stat(gifPath)
+    const stats = fs.statSync(gifPath)
     console.log(`✅ Serving GIF: ${gifPath} (${Math.round(stats.size / 1024)}KB)`)
 
     res.setHeader("Content-Type", "image/gif")
