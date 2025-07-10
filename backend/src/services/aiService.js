@@ -1,15 +1,28 @@
-import OpenAI from "openai";
-import fs from "fs";
+import OpenAI from "openai"
+import fs from "fs"
 
 class AIService {
   constructor() {
-    console.log("🔧 Initializing Enhanced AIService...");
-    
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    // Debug logging
+    console.log("🔧 Initializing AIService...")
+    console.log("🔍 OPENROUTER_API_KEY exists:", !!process.env.OPENROUTER_API_KEY)
+    console.log("🔍 OPENROUTER_API_KEY length:", process.env.OPENROUTER_API_KEY?.length || 0)
+
+    // Check if OpenRouter API key is available
+    const apiKey = process.env.OPENROUTER_API_KEY
+
     if (!apiKey) {
-      throw new Error("OPENROUTER_API_KEY environment variable is missing");
+      console.error("❌ OPENROUTER_API_KEY environment variable is missing or empty")
+      console.error(
+        "Available environment variables:",
+        Object.keys(process.env).filter((key) => key.includes("API")),
+      )
+      throw new Error("OPENROUTER_API_KEY environment variable is missing or empty. Please check your .env file.")
     }
 
+    console.log("✅ OpenRouter API key found, initializing client...")
+
+    // Configure OpenAI client to use OpenRouter
     this.openai = new OpenAI({
       apiKey: apiKey,
       baseURL: "https://openrouter.ai/api/v1",
@@ -17,312 +30,289 @@ class AIService {
         "HTTP-Referer": "http://localhost:3000",
         "X-Title": "AI GIF Generator",
       },
-    });
+    })
 
-    console.log("✅ AIService initialized successfully");
+    console.log("✅ AIService initialized successfully")
   }
 
   async transcribeAudio(audioPath) {
     try {
-      console.log("🎤 Transcribing audio...");
-      
+      console.log("🎤 Transcribing audio with Whisper via OpenRouter...")
+
       if (!fs.existsSync(audioPath)) {
-        throw new Error(`Audio file not found: ${audioPath}`);
+        throw new Error(`Audio file not found: ${audioPath}`)
       }
 
-      const audioFile = fs.createReadStream(audioPath);
+      const audioFile = fs.createReadStream(audioPath)
+
+      // Note: OpenRouter may not support audio transcriptions
       const transcription = await this.openai.audio.transcriptions.create({
         file: audioFile,
         model: "openai/whisper-1",
         response_format: "verbose_json",
         timestamp_granularities: ["segment"],
-      });
+      })
 
-      console.log("✅ Audio transcribed successfully");
-      return transcription;
+      console.log("✅ Audio transcribed successfully")
+      console.log(`📝 Transcript: ${transcription.text.substring(0, 200)}...`)
+      return transcription
     } catch (error) {
-      console.error("❌ Transcription Error:", error);
-      return this.createFallbackTranscript();
+      console.error("❌ Transcription Error:", error)
+
+      console.log("⚠️ Using fallback transcript due to transcription error")
+      // Create more realistic fallback segments based on video duration
+      return {
+        text: "This video contains various moments that could be interesting for GIF creation. The content includes different scenes and activities throughout the duration.",
+        segments: [
+          { start: 0, end: 3, text: "Opening scene with initial activity" },
+          { start: 3, end: 6, text: "Middle section with main content" },
+          { start: 6, end: 9, text: "Closing moments with final activity" },
+        ],
+      }
     }
   }
 
   async analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration) {
     try {
-      console.log("🤖 Analyzing transcript with enhanced context analysis...");
-      
-      const systemPrompt = `You are an expert meme GIF creator who understands both visual content and internet culture. Your job is to identify the BEST moments from video content that will create engaging, shareable GIFs.
+      console.log("🤖 Analyzing transcript with AI via OpenRouter...")
+      console.log(`📊 Video duration: ${videoDuration} seconds`)
 
-ANALYSIS APPROACH:
-1. Carefully read the actual video content analysis
-2. Match the user's prompt with the REAL video content
-3. Look for moments with high visual appeal, action, or emotional impact
-4. Prioritize moments that align with the user's specific request
+      const systemPrompt = `You are a meme GIF caption generator. Your job is to create FUNNY, RELATABLE, and ENGAGING captions for GIFs based on video content and user prompts.
 
-CAPTION GUIDELINES:
-- Keep captions SHORT (10-20 characters max)
-- Use modern meme language and formats
-- Make them RELATABLE and SHAREABLE
-- Common formats: "When you...", "Me trying to...", "POV:", "That feeling when..."
-- Match the caption to the ACTUAL video content, not generic assumptions
+CAPTION STYLE GUIDELINES:
+- Write like popular meme captions (funny, relatable, internet culture)
+- Use casual language, slang, and meme formats
+- Keep captions SHORT (15-25 characters max)
+- Make them PUNCHY and MEMORABLE
+- Use formats like:
+  * "When you..." 
+  * "Me trying to..."
+  * "POV: you're..."
+  * "That feeling when..."
+  * Direct quotes or reactions
+  * Relatable situations
 
-VISUAL MOMENT SELECTION:
-- Look for action peaks, emotional expressions, or interesting visuals
-- Avoid static or boring moments
-- Choose moments that tell a story or convey emotion
-- Consider transitions, reactions, or dynamic movement
+EXAMPLES OF GOOD MEME CAPTIONS:
+- "When Monday hits"
+- "Me pretending to work"
+- "POV: you're broke"
+- "That's sus"
+- "Big mood"
+- "Me avoiding responsibilities"
+- "When the beat drops"
+- "Caught in 4K"
+- "Main character energy"
 
-Return EXACTLY 3 moments in this JSON format:
+Return EXACTLY 3 moments with this structure:
 [
   {
     "startTime": 0,
     "endTime": 3,
-    "caption": "Short meme caption",
-    "reason": "Why this specific moment from the video matches the prompt"
+    "caption": "Meme-style caption here",
+    "reason": "Why this moment matches the prompt"
   }
 ]
 
-IMPORTANT RULES:
-- Base selections on ACTUAL video content, not prompt keywords
-- Each moment should be 2-4 seconds long
+Rules:
+- MUST return exactly 3 moments
+- Each moment should be 2-3 seconds long
+- startTime and endTime should be integers (seconds)
 - Moments should not overlap significantly
-- startTime and endTime must be integers (seconds)
-- endTime cannot exceed ${videoDuration} seconds
-- Return ONLY the JSON array, no other text`;
+- Caption should be MEME-STYLE (max 25 characters)
+- Focus on the most engaging/meme-worthy parts
+- Ensure endTime does not exceed ${videoDuration} seconds
+- Return ONLY the JSON array, no other text`
 
-      const contentAnalysis = this.buildContentAnalysisPrompt(transcript);
-      
       const userPrompt = `Video Duration: ${videoDuration} seconds
-User Request: "${prompt}"
+User Prompt: "${prompt}"
 
-ACTUAL VIDEO CONTENT ANALYSIS:
-${contentAnalysis}
+Video Content Analysis:
+${transcript.text}
 
-Based on the REAL video content above, find 3 moments that best match the user's request: "${prompt}"
+Detailed Segments:
+${transcript.segments?.map((seg) => `${Math.floor(seg.start)}s-${Math.floor(seg.end)}s: ${seg.text}`).join("\n") || "No segments available"}
 
-Focus on:
-1. Actual visual events happening in the video
-2. Moments that would make good GIFs (action, emotion, interesting visuals)
-3. Alignment between user request and actual content
-4. Creating meme-worthy captions that match the real content
+Create EXACTLY 3 meme-style GIF moments based on the prompt "${prompt}". 
 
-Return only the JSON array with 3 carefully selected moments.`;
+Focus on making captions that are:
+1. FUNNY and relatable
+2. Match internet meme culture
+3. Are SHORT and punchy
+4. Would make people want to share the GIF
 
+Return only the JSON array with meme captions.`
+
+      // Use the correct OpenAI model available on OpenRouter
       const completion = await this.openai.chat.completions.create({
-        model: "openai/gpt-4-turbo-preview", // Use GPT-4 for better analysis
+        model: "openai/gpt-3.5-turbo-0613",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.7, // Balanced creativity
-        max_tokens: 1000,
-      });
+        temperature: 0.9, // Higher temperature for more creative/funny responses
+        max_tokens: 800,
+      })
 
-      const response = completion.choices[0].message.content.trim();
-      console.log("🤖 AI Response:", response);
+      const response = completion.choices[0].message.content.trim()
+      console.log("🤖 AI Response:", response)
 
-      return this.parseAndValidateMoments(response, videoDuration, transcript, prompt);
-    } catch (error) {
-      console.error("❌ AI Analysis Error:", error);
-      return this.createIntelligentFallbackMoments(transcript, videoDuration, prompt);
-    }
-  }
+      try {
+        const jsonMatch = response.match(/\[[\s\S]*\]/)
+        const jsonString = jsonMatch ? jsonMatch[0] : response
+        const moments = JSON.parse(jsonString)
 
-  buildContentAnalysisPrompt(transcript) {
-    let analysis = `Video Overview: ${transcript.text}\n\n`;
-    
-    if (transcript.segments && transcript.segments.length > 0) {
-      analysis += "Detailed Timeline:\n";
-      transcript.segments.forEach((segment, index) => {
-        analysis += `${Math.floor(segment.start)}s-${Math.floor(segment.end)}s: ${segment.text}\n`;
-        if (segment.frameAnalysis) {
-          analysis += `  Visual: ${segment.frameAnalysis}\n`;
+        if (Array.isArray(moments) && moments.length > 0) {
+          let validMoments = moments
+            .filter(
+              (moment) =>
+                typeof moment.startTime === "number" &&
+                typeof moment.endTime === "number" &&
+                moment.startTime < moment.endTime &&
+                moment.endTime <= videoDuration &&
+                moment.startTime >= 0,
+            )
+            .slice(0, 3) // Ensure exactly 3
+
+          // If we don't have 3 valid moments, create meme-style fallback moments
+          if (validMoments.length < 3) {
+            console.log(`⚠️ Only ${validMoments.length} valid moments found, creating meme-style fallback moments`)
+            validMoments = this.createMemeStyleFallbackMoments(transcript, videoDuration, prompt)
+          }
+
+          console.log("✅ AI analysis completed successfully")
+          console.log(`📊 Found ${validMoments.length} meme-worthy moments`)
+          return validMoments
         }
-      });
-    }
 
-    if (transcript.contentAnalysis && transcript.contentAnalysis.length > 0) {
-      analysis += "\nFrame-by-Frame Analysis:\n";
-      transcript.contentAnalysis.forEach((frame, index) => {
-        analysis += `${Math.floor(frame.timestamp)}s: ${frame.analysis}\n`;
-      });
-    }
-
-    return analysis;
-  }
-
-  parseAndValidateMoments(response, videoDuration, transcript, prompt) {
-    try {
-      // Extract JSON from response
-      const jsonMatch = response.match(/\[[\s\S]*\]/);
-      const jsonString = jsonMatch ? jsonMatch[0] : response;
-      const moments = JSON.parse(jsonString);
-
-      if (!Array.isArray(moments) || moments.length === 0) {
-        throw new Error("Invalid moments structure");
+        throw new Error("Invalid moments structure")
+      } catch (parseError) {
+        console.error("❌ Failed to parse AI response as JSON:", parseError)
+        throw new Error("Invalid AI response format")
       }
+    } catch (error) {
+      console.error("❌ AI Analysis Error:", error)
 
-      // Validate and filter moments
-      const validMoments = moments
-        .filter(moment => 
-          typeof moment.startTime === 'number' &&
-          typeof moment.endTime === 'number' &&
-          moment.startTime >= 0 &&
-          moment.endTime <= videoDuration &&
-          moment.startTime < moment.endTime &&
-          moment.caption && moment.caption.trim().length > 0
-        )
-        .slice(0, 3);
-
-      if (validMoments.length < 3) {
-        console.log(`⚠️ Only ${validMoments.length} valid moments found, creating intelligent fallback`);
-        return this.createIntelligentFallbackMoments(transcript, videoDuration, prompt);
-      }
-
-      console.log("✅ AI analysis completed successfully");
-      console.log(`📊 Found ${validMoments.length} content-aware moments`);
-      
-      return validMoments;
-    } catch (parseError) {
-      console.error("❌ Failed to parse AI response:", parseError);
-      return this.createIntelligentFallbackMoments(transcript, videoDuration, prompt);
+      const fallbackMoments = this.createMemeStyleFallbackMoments(transcript, videoDuration, prompt)
+      console.log("⚠️ AI analysis failed, using meme-style fallback moments")
+      return fallbackMoments
     }
   }
 
-  createIntelligentFallbackMoments(transcript, videoDuration, prompt) {
-    console.log("📋 Creating intelligent fallback moments based on content...");
+  createMemeStyleFallbackMoments(transcript, videoDuration, prompt) {
+    console.log("📋 Creating meme-style fallback moments...")
+    console.log(`📊 Video duration: ${videoDuration} seconds`)
 
-    const moments = [];
-    const promptLower = prompt.toLowerCase();
+    const moments = []
+    const promptLower = prompt.toLowerCase()
 
-    // Analyze available content for better moment selection
-    const segments = transcript.segments || [];
-    const hasFrameAnalysis = transcript.contentAnalysis && transcript.contentAnalysis.length > 0;
+    // Generate meme captions based on prompt keywords
+    let memeTemplates = []
 
-    // Generate contextual meme templates
-    const memeTemplates = this.generateContextualMemeTemplates(promptLower, segments, hasFrameAnalysis);
+    if (promptLower.includes("laugh") || promptLower.includes("funny") || promptLower.includes("comedy")) {
+      memeTemplates = ["When it's actually funny", "Me laughing at my problems", "That's hilarious"]
+    } else if (promptLower.includes("dance") || promptLower.includes("dancing")) {
+      memeTemplates = ["When the beat drops", "Main character energy", "Me at 3AM"]
+    } else if (promptLower.includes("action") || promptLower.includes("fight")) {
+      memeTemplates = ["About to do something", "Main character moment", "That's intense"]
+    } else if (promptLower.includes("sad") || promptLower.includes("cry")) {
+      memeTemplates = ["Big sad energy", "Me on Monday", "That hits different"]
+    } else if (promptLower.includes("surprise") || promptLower.includes("shock")) {
+      memeTemplates = ["Plot twist", "Didn't see that coming", "Caught in 4K"]
+    } else if (promptLower.includes("love") || promptLower.includes("romantic")) {
+      memeTemplates = ["When you're in love", "Relationship goals", "That's cute"]
+    } else if (promptLower.includes("angry") || promptLower.includes("mad")) {
+      memeTemplates = ["When someone lies", "Big mad energy", "That's not it"]
+    } else {
+      // Generic meme templates
+      memeTemplates = ["Big mood", "That's a vibe", "Main character energy"]
+    }
 
+    // Always create exactly 3 moments regardless of video duration
     if (videoDuration >= 9) {
-      // For longer videos, spread moments across the timeline
-      const positions = [0, Math.floor(videoDuration / 2) - 1, videoDuration - 3];
-      
-      positions.forEach((start, index) => {
-        const end = Math.min(start + 3, videoDuration);
-        const relevantSegment = this.findRelevantSegment(segments, start, end);
-        
-        moments.push({
-          startTime: start,
-          endTime: end,
-          caption: memeTemplates[index] || `Moment ${index + 1}`,
-          reason: `Strategic moment based on ${relevantSegment ? 'content analysis' : 'timeline position'}`
-        });
-      });
+      // For videos 9+ seconds, create 3 non-overlapping 3-second segments
+      moments.push(
+        {
+          startTime: 0,
+          endTime: 3,
+          caption: memeTemplates[0] || "Opening vibes",
+          reason: "Opening moment with meme potential",
+        },
+        {
+          startTime: Math.floor(videoDuration / 2) - 1,
+          endTime: Math.floor(videoDuration / 2) + 2,
+          caption: memeTemplates[1] || "Peak content",
+          reason: "Middle moment with high engagement",
+        },
+        {
+          startTime: videoDuration - 3,
+          endTime: videoDuration,
+          caption: memeTemplates[2] || "Ending energy",
+          reason: "Closing moment with impact",
+        },
+      )
     } else if (videoDuration >= 6) {
-      // For medium videos, create overlapping moments
-      const segmentLength = 2;
+      // For 6-8 second videos, create 3 segments with minimal overlap
+      moments.push(
+        {
+          startTime: 0,
+          endTime: 2,
+          caption: memeTemplates[0] || "Start vibes",
+          reason: "Opening meme moment",
+        },
+        {
+          startTime: 2,
+          endTime: 4,
+          caption: memeTemplates[1] || "Mid energy",
+          reason: "Middle meme moment",
+        },
+        {
+          startTime: videoDuration - 2,
+          endTime: videoDuration,
+          caption: memeTemplates[2] || "End mood",
+          reason: "Closing meme moment",
+        },
+      )
+    } else {
+      // For very short videos, create 3 overlapping segments
+      const segmentLength = Math.max(2, Math.floor(videoDuration / 2))
       for (let i = 0; i < 3; i++) {
-        const start = Math.floor(i * (videoDuration - segmentLength) / 2);
-        const end = Math.min(start + segmentLength, videoDuration);
-        
+        const startTime = Math.floor((videoDuration / 4) * i)
+        const endTime = Math.min(startTime + segmentLength, videoDuration)
+
         moments.push({
-          startTime: start,
-          endTime: end,
+          startTime,
+          endTime,
           caption: memeTemplates[i] || `Vibe ${i + 1}`,
-          reason: `Content-aware moment ${i + 1}`
-        });
-      }
-    } else {
-      // For short videos, create strategic overlapping segments
-      const segmentLength = Math.max(2, Math.floor(videoDuration / 2));
-      for (let i = 0; i < 3; i++) {
-        const start = Math.floor(i * videoDuration / 4);
-        const end = Math.min(start + segmentLength, videoDuration);
-        
-        moments.push({
-          startTime: start,
-          endTime: end,
-          caption: memeTemplates[i] || `Beat ${i + 1}`,
-          reason: `Short video moment ${i + 1}`
-        });
+          reason: `Meme moment ${i + 1}`,
+        })
       }
     }
 
-    console.log(`📊 Created ${moments.length} intelligent fallback moments`);
-    return moments;
-  }
+    console.log(`📊 Created exactly ${moments.length} meme-style fallback moments:`)
+    moments.forEach((moment, index) => {
+      console.log(`  ${index + 1}. ${moment.startTime}s-${moment.endTime}s: "${moment.caption}"`)
+    })
 
-  generateContextualMemeTemplates(promptLower, segments, hasFrameAnalysis) {
-    // Base templates on prompt analysis
-    let templates = [];
-
-    if (promptLower.includes('dance') || promptLower.includes('dancing')) {
-      templates = ["When the beat drops", "Dance like nobody's watching", "Rhythm vibes"];
-    } else if (promptLower.includes('laugh') || promptLower.includes('funny')) {
-      templates = ["When it's actually funny", "Can't stop laughing", "That's hilarious"];
-    } else if (promptLower.includes('action') || promptLower.includes('fight')) {
-      templates = ["Action mode activated", "Here we go", "Main character energy"];
-    } else if (promptLower.includes('sad') || promptLower.includes('cry')) {
-      templates = ["Big sad vibes", "Emotional damage", "That hits deep"];
-    } else if (promptLower.includes('surprise') || promptLower.includes('shock')) {
-      templates = ["Plot twist", "Didn't see that coming", "Shock factor"];
-    } else if (promptLower.includes('cute') || promptLower.includes('adorable')) {
-      templates = ["Too cute", "Adorable overload", "Wholesome content"];
-    } else {
-      // Generic engaging templates
-      templates = ["Big mood", "That's a vibe", "Main character moment"];
-    }
-
-    // If we have frame analysis, try to incorporate actual content
-    if (hasFrameAnalysis && segments.length > 0) {
-      const contentKeywords = segments.map(s => s.text.toLowerCase()).join(' ');
-      
-      if (contentKeywords.includes('person') || contentKeywords.includes('people')) {
-        templates = templates.map(t => t); // Keep as is for people content
-      } else if (contentKeywords.includes('animal')) {
-        templates = ["Cute animal vibes", "Animals being animals", "Nature moment"];
-      } else if (contentKeywords.includes('music') || contentKeywords.includes('sound')) {
-        templates = ["When the music hits", "Audio vibes", "Sound moment"];
-      }
-    }
-
-    return templates;
-  }
-
-  findRelevantSegment(segments, startTime, endTime) {
-    return segments.find(segment => 
-      segment.start <= startTime && segment.end >= endTime
-    ) || segments.find(segment => 
-      Math.abs(segment.start - startTime) < 2
-    );
-  }
-
-  createFallbackTranscript() {
-    return {
-      text: "Video content with various scenes and moments suitable for GIF creation",
-      segments: [
-        { start: 0, end: 3, text: "Opening content with potential for engagement" },
-        { start: 3, end: 6, text: "Mid-video content with visual interest" },
-        { start: 6, end: 9, text: "Closing content with memorable moments" },
-      ],
-    };
+    return moments
   }
 
   async testConnection() {
     try {
-      console.log("🔍 Testing OpenRouter connection...");
-      
-      const completion = await this.openai.chat.completions.create({
-        model: "openai/gpt-3.5-turbo",
-        messages: [{ role: "user", content: "Hello, test message." }],
-        max_tokens: 10,
-      });
+      console.log("🔍 Testing OpenRouter connection...")
 
-      console.log("✅ OpenRouter connection successful");
-      return true;
+      const completion = await this.openai.chat.completions.create({
+        model: "openai/gpt-3.5-turbo-0613",
+        messages: [{ role: "user", content: "Hello, this is a test message." }],
+        max_tokens: 10,
+      })
+
+      console.log("✅ OpenRouter connection successful")
+      return true
     } catch (error) {
-      console.error("❌ OpenRouter connection failed:", error);
-      return false;
+      console.error("❌ OpenRouter connection failed:", error)
+      return false
     }
   }
 }
 
-export default new AIService();
+export default new AIService()
