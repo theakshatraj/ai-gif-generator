@@ -9,11 +9,7 @@
     "dev": "nodemon src/server.js",
     "build": "echo 'Build completed - dependencies installed via Dockerfile'",
     "test": "echo 'No tests specified'",
-    "postinstall": "npm run install-ytdlp",
-    "install-ytdlp": "pip install -U yt-dlp",
-    "update-ytdlp": "pip install -U yt-dlp",
-    "setup": "npm install && npm run install-ytdlp",
-    "check-ytdlp": "yt-dlp --version"
+    "postinstall": "echo 'Dependencies installed successfully'"
   },
   "dependencies": {
     "axios": "^1.7.7",
@@ -39,8 +35,7 @@
     "generator",
     "youtube",
     "ffmpeg",
-    "video-processing",
-    "yt-dlp"
+    "video-processing"
   ],
   "author": "Your Name",
   "license": "MIT",
