@@ -1,37 +1,54 @@
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import multer from "multer"
+import path from "path"
+import fs from "fs"
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Use environment variable for upload directory
+const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads")
 
-// Configure storage
+// Ensure upload directory exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+  console.log(`📁 Created upload directory: ${uploadDir}`)
+}
+
+// Parse MAX_FILE_SIZE from environment variable
+const maxFileSize = process.env.MAX_FILE_SIZE ? Number.parseInt(process.env.MAX_FILE_SIZE) : 50 * 1024 * 1024 // Default 50MB
+
+console.log("📏 Upload Configuration:")
+console.log("Upload Directory:", uploadDir)
+console.log("Max File Size:", `${Math.round(maxFileSize / 1024 / 1024)}MB`)
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../../uploads'));
+    cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+    // Generate unique filename with timestamp
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
+    const extension = path.extname(file.originalname)
+    cb(null, file.fieldname + "-" + uniqueSuffix + extension)
+  },
+})
 
-// File filter
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype === 'video/mp4') {
-    cb(null, true);
-  } else {
-    cb(new Error('Only MP4 files are allowed'), false);
-  }
-};
+  // Check file type
+  const allowedTypes = /mp4|avi|mov|wmv|flv|webm|mkv|m4v/
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase())
+  const mimetype = allowedTypes.test(file.mimetype)
 
-// Configure multer
+  if (mimetype && extname) {
+    return cb(null, true)
+  } else {
+    cb(new Error("Only video files are allowed!"))
+  }
+}
+
 const upload = multer({
   storage: storage,
-  fileFilter: fileFilter,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024 // 100MB
-  }
-});
+    fileSize: maxFileSize, // Use environment variable
+  },
+  fileFilter: fileFilter,
+})
 
-export default upload;
+export default upload
