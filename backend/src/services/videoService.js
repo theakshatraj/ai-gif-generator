@@ -18,12 +18,11 @@ class VideoService {
   }
 
   setupFFmpeg() {
-    ffmpeg.setFfmpegPath("ffmpeg");   // ✅ Use system ffmpeg
-    ffmpeg.setFfprobePath("ffprobe"); // ✅ Use system ffprobe
+    ffmpeg.setFfmpegPath("ffmpeg");
+    ffmpeg.setFfprobePath("ffprobe");
   }
 
   ensureDirectories() {
-    // Ensure all directories exist
     [this.uploadDir, this.outputDir, this.tempDir].forEach(dir => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -32,113 +31,239 @@ class VideoService {
     });
   }
 
+  async updateYtDlp() {
+    try {
+      console.log('🔄 Updating yt-dlp to latest version...');
+      await execAsync('pip install -U yt-dlp', { timeout: 60000 });
+      console.log('✅ yt-dlp updated successfully');
+    } catch (error) {
+      console.warn('⚠️ Failed to update yt-dlp:', error.message);
+    }
+  }
+
   async downloadFromYoutube(youtubeUrl) {
     const videoId = uuidv4();
     const videoPath = path.join(this.tempDir, `${videoId}.mp4`);
     
-    console.log('⬇️ Downloading video with enhanced anti-bot parameters...');
+    console.log('⬇️ Starting YouTube download with enhanced anti-detection...');
     console.log('🔗 URL:', youtubeUrl);
 
-    // Fixed yt-dlp command with proper quoting
-    const ytDlpCommand = `yt-dlp --format "best[height<=720]/best[height<=480]/worst[ext=mp4]/worst[ext=webm]/worst" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --add-header "Accept-Language:en-US,en;q=0.9" --add-header "Accept-Encoding:gzip, deflate, br" --add-header "DNT:1" --add-header "Connection:keep-alive" --add-header "Upgrade-Insecure-Requests:1" --referer "https://www.youtube.com/" --extractor-retries 3 --fragment-retries 3 --retry-sleep 2 --no-check-certificate --geo-bypass --sleep-interval 1 --max-sleep-interval 5 --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --max-filesize 100M --socket-timeout 30 --output "${videoPath}" "${youtubeUrl}"`;
+    // First, try to update yt-dlp
+    await this.updateYtDlp();
 
-    // Add delay to avoid rate limiting
-    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-    await delay(Math.random() * 3000 + 2000); // Random delay 2-5 seconds
-
-    try {
-      const { stdout, stderr } = await execAsync(ytDlpCommand, {
-        timeout: 120000, // 2 minute timeout
-        env: {
-          ...process.env,
-          TMPDIR: '/tmp',
-          YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
-        }
-      });
-      
-      if (stderr && stderr.includes('ERROR')) {
-        console.log('⚠️ stderr contains error, but checking if file was created...');
-        console.log('stderr:', stderr);
+    // Enhanced strategies with better anti-detection
+    const downloadStrategies = [
+      {
+        name: 'Enhanced Anti-Detection',
+        command: this.buildEnhancedCommand(videoPath, youtubeUrl),
+        timeout: 180000 // 3 minutes
+      },
+      {
+        name: 'Cookie-based Download',
+        command: this.buildCookieCommand(videoPath, youtubeUrl),
+        timeout: 150000
+      },
+      {
+        name: 'Proxy-like Headers',
+        command: this.buildProxyCommand(videoPath, youtubeUrl),
+        timeout: 120000
+      },
+      {
+        name: 'Mobile User Agent',
+        command: this.buildMobileCommand(videoPath, youtubeUrl),
+        timeout: 120000
+      },
+      {
+        name: 'Minimal Approach',
+        command: this.buildMinimalCommand(videoPath, youtubeUrl),
+        timeout: 90000
       }
-      
-      // Check if file was actually created
-      if (fs.existsSync(videoPath)) {
-        const stats = fs.statSync(videoPath);
-        if (stats.size > 0) {
-          console.log('✅ Video downloaded successfully');
-          console.log(`📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+    ];
+
+    for (const [index, strategy] of downloadStrategies.entries()) {
+      try {
+        console.log(`🔄 Attempting strategy ${index + 1}/${downloadStrategies.length}: ${strategy.name}`);
+        
+        // Add progressive delays between attempts
+        if (index > 0) {
+          const delay = Math.min(index * 5000, 30000); // Max 30 second delay
+          console.log(`⏱️ Waiting ${delay/1000}s before next attempt...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+        const result = await this.executeDownloadCommand(strategy.command, strategy.timeout);
+        
+        if (await this.validateDownloadedFile(videoPath)) {
+          console.log(`✅ Download successful with ${strategy.name}`);
           return { 
             videoPath, 
             videoInfo: await this.getVideoInfo(videoPath) 
           };
+        } else {
+          throw new Error('Downloaded file validation failed');
+        }
+        
+      } catch (error) {
+        console.log(`❌ Strategy ${index + 1} failed:`, error.message);
+        await this.cleanupFile(videoPath);
+        
+        // If this is the last strategy, throw the error
+        if (index === downloadStrategies.length - 1) {
+          throw new Error(`All download strategies failed. Last error: ${error.message}`);
         }
       }
-      
-      throw new Error('Video file was not created or is empty');
-      
-    } catch (downloadError) {
-      console.log('❌ First download attempt failed, trying fallback methods...');
-      console.log('Error:', downloadError.message);
-      
-      // Clean up failed file
-      if (fs.existsSync(videoPath)) {
-        fs.unlinkSync(videoPath);
-      }
-      
-      // Try multiple fallback strategies
-      const fallbackStrategies = [
-        {
-          name: 'Simple format',
-          command: `yt-dlp --format "worst[ext=mp4]/worst" --no-check-certificate --geo-bypass --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --max-filesize 50M --socket-timeout 30 --output "${videoPath}" "${youtubeUrl}"`
-        },
-        {
-          name: 'Generic extractor',
-          command: `yt-dlp --format "best[height<=480]/worst" --force-generic-extractor --no-check-certificate --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --output "${videoPath}" "${youtubeUrl}"`
-        },
-        {
-          name: 'Minimal options',
-          command: `yt-dlp --format "worst" --cache-dir "/tmp/yt-dlp-cache" --output "${videoPath}" "${youtubeUrl}"`
-        }
-      ];
+    }
+  }
 
-      for (const strategy of fallbackStrategies) {
-        try {
-          console.log(`🔄 Trying fallback strategy: ${strategy.name}`);
-          await delay(5000); // Wait 5 seconds between attempts
-          
-          await execAsync(strategy.command, { 
-            timeout: 90000,
-            env: {
-              ...process.env,
-              TMPDIR: '/tmp',
-              YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
-            }
-          });
-          
-          // Check if file was created
-          if (fs.existsSync(videoPath)) {
-            const stats = fs.statSync(videoPath);
-            if (stats.size > 0) {
-              console.log(`✅ Video downloaded successfully with ${strategy.name}`);
-              console.log(`📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-              return { 
-                videoPath, 
-                videoInfo: await this.getVideoInfo(videoPath) 
-              };
-            }
-          }
-          
-        } catch (strategyError) {
-          console.log(`❌ ${strategy.name} failed:`, strategyError.message);
-          // Clean up failed file
-          if (fs.existsSync(videoPath)) {
-            fs.unlinkSync(videoPath);
-          }
-          continue;
-        }
+  buildEnhancedCommand(videoPath, youtubeUrl) {
+    return `yt-dlp \\
+      --format "best[height<=720][ext=mp4]/best[height<=480][ext=mp4]/worst[ext=mp4]/best[ext=mp4]/worst" \\
+      --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
+      --add-header "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \\
+      --add-header "Accept-Language:en-US,en;q=0.5" \\
+      --add-header "Accept-Encoding:gzip, deflate, br" \\
+      --add-header "DNT:1" \\
+      --add-header "Connection:keep-alive" \\
+      --add-header "Upgrade-Insecure-Requests:1" \\
+      --add-header "Sec-Fetch-Dest:document" \\
+      --add-header "Sec-Fetch-Mode:navigate" \\
+      --add-header "Sec-Fetch-Site:none" \\
+      --add-header "Sec-Fetch-User:?1" \\
+      --referer "https://www.youtube.com/" \\
+      --extractor-retries 5 \\
+      --fragment-retries 5 \\
+      --retry-sleep 3 \\
+      --no-check-certificate \\
+      --geo-bypass \\
+      --sleep-interval 2 \\
+      --max-sleep-interval 8 \\
+      --cache-dir "/tmp/yt-dlp-cache" \\
+      --no-warnings \\
+      --ignore-errors \\
+      --max-filesize 150M \\
+      --socket-timeout 60 \\
+      --http-chunk-size 10M \\
+      --output "${videoPath}" \\
+      "${youtubeUrl}"`;
+  }
+
+  buildCookieCommand(videoPath, youtubeUrl) {
+    return `yt-dlp \\
+      --format "best[height<=720]/best[height<=480]/worst[ext=mp4]/worst" \\
+      --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
+      --add-header "Accept:*/*" \\
+      --add-header "Accept-Language:en-US,en;q=0.9" \\
+      --add-header "Cache-Control:no-cache" \\
+      --add-header "Pragma:no-cache" \\
+      --extractor-retries 3 \\
+      --fragment-retries 3 \\
+      --retry-sleep 5 \\
+      --no-check-certificate \\
+      --geo-bypass \\
+      --sleep-interval 3 \\
+      --max-sleep-interval 10 \\
+      --cache-dir "/tmp/yt-dlp-cache" \\
+      --no-warnings \\
+      --ignore-errors \\
+      --max-filesize 100M \\
+      --socket-timeout 45 \\
+      --output "${videoPath}" \\
+      "${youtubeUrl}"`;
+  }
+
+  buildProxyCommand(videoPath, youtubeUrl) {
+    return `yt-dlp \\
+      --format "worst[ext=mp4]/worst[ext=webm]/worst" \\
+      --user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
+      --add-header "X-Forwarded-For:8.8.8.8" \\
+      --add-header "X-Real-IP:8.8.8.8" \\
+      --extractor-retries 2 \\
+      --fragment-retries 2 \\
+      --retry-sleep 2 \\
+      --no-check-certificate \\
+      --geo-bypass \\
+      --cache-dir "/tmp/yt-dlp-cache" \\
+      --no-warnings \\
+      --ignore-errors \\
+      --max-filesize 80M \\
+      --socket-timeout 30 \\
+      --output "${videoPath}" \\
+      "${youtubeUrl}"`;
+  }
+
+  buildMobileCommand(videoPath, youtubeUrl) {
+    return `yt-dlp \\
+      --format "worst[ext=mp4]/worst" \\
+      --user-agent "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" \\
+      --add-header "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \\
+      --add-header "Accept-Language:en-US,en;q=0.5" \\
+      --extractor-retries 2 \\
+      --no-check-certificate \\
+      --geo-bypass \\
+      --cache-dir "/tmp/yt-dlp-cache" \\
+      --no-warnings \\
+      --ignore-errors \\
+      --max-filesize 50M \\
+      --socket-timeout 25 \\
+      --output "${videoPath}" \\
+      "${youtubeUrl}"`;
+  }
+
+  buildMinimalCommand(videoPath, youtubeUrl) {
+    return `yt-dlp \\
+      --format "worst" \\
+      --no-check-certificate \\
+      --geo-bypass \\
+      --cache-dir "/tmp/yt-dlp-cache" \\
+      --no-warnings \\
+      --ignore-errors \\
+      --output "${videoPath}" \\
+      "${youtubeUrl}"`;
+  }
+
+  async executeDownloadCommand(command, timeout) {
+    const env = {
+      ...process.env,
+      TMPDIR: '/tmp',
+      YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache',
+      PYTHONPATH: '/usr/local/lib/python3.*/site-packages'
+    };
+
+    return await execAsync(command, { timeout, env });
+  }
+
+  async validateDownloadedFile(videoPath) {
+    try {
+      if (!fs.existsSync(videoPath)) {
+        return false;
       }
-      
-      throw new Error(`All download attempts failed. The video might be private, geo-blocked, or require authentication. Last error: ${downloadError.message}`);
+
+      const stats = fs.statSync(videoPath);
+      if (stats.size === 0) {
+        return false;
+      }
+
+      // Additional validation: check if it's a valid video file
+      try {
+        await this.getVideoInfo(videoPath);
+        console.log(`✅ Video file validated: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+        return true;
+      } catch (error) {
+        console.log(`❌ Video file validation failed: ${error.message}`);
+        return false;
+      }
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async cleanupFile(filePath) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Failed to cleanup ${filePath}:`, error.message);
     }
   }
 
@@ -148,79 +273,82 @@ class VideoService {
 
     try {
       console.log("📝 Downloading YouTube captions...");
-      console.log("🔗 URL:", youtubeUrl);
+      
+      // Enhanced caption download strategies
+      const captionStrategies = [
+        {
+          name: 'Auto-generated captions',
+          langs: ['en', 'en-US', 'en-GB', 'en-auto', 'auto']
+        },
+        {
+          name: 'Manual captions',
+          langs: ['en', 'en-US', 'en-GB']
+        },
+        {
+          name: 'Any available captions',
+          langs: ['*']
+        }
+      ];
 
-      // Try to download captions in different languages
-      const languages = ["en", "en-US", "en-GB", "auto"]; // Try English first, then auto-generated
-      let captionsDownloaded = false;
+      for (const strategy of captionStrategies) {
+        for (const lang of strategy.langs) {
+          try {
+            console.log(`🔧 Trying ${strategy.name} in language: ${lang}`);
+            
+            const command = `yt-dlp \\
+              --write-auto-subs \\
+              --write-subs \\
+              --sub-langs "${lang}" \\
+              --sub-format vtt \\
+              --skip-download \\
+              --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
+              --no-check-certificate \\
+              --geo-bypass \\
+              --cache-dir "/tmp/yt-dlp-cache" \\
+              --no-warnings \\
+              --ignore-errors \\
+              --output "${captionPath.replace(".vtt", "")}" \\
+              "${youtubeUrl}"`;
 
-      for (const lang of languages) {
-        try {
-          // Fixed caption download command with proper quoting
-          const command = `yt-dlp --write-subs --sub-langs "${lang}" --sub-format vtt --skip-download --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --no-check-certificate --geo-bypass --cache-dir "/tmp/yt-dlp-cache" --no-warnings --ignore-errors --output "${captionPath.replace(".vtt", "")}" "${youtubeUrl}"`;
-
-          console.log(`🔧 Trying captions in language: ${lang}`);
-
-          const { stdout, stderr } = await execAsync(command, { 
-            timeout: 60000,
-            env: {
-              ...process.env,
-              TMPDIR: '/tmp',
-              YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
-            }
-          });
-
-          if (stdout) {
-            console.log("📤 yt-dlp captions stdout:", stdout);
-          }
-
-          // Check if caption file was created (yt-dlp adds language suffix)
-          const possibleCaptionFiles = [
-            `${captionPath.replace(".vtt", "")}.${lang}.vtt`,
-            `${captionPath.replace(".vtt", "")}.en.vtt`,
-            `${captionPath.replace(".vtt", "")}.vtt`,
-          ];
-
-          for (const possibleFile of possibleCaptionFiles) {
-            if (fs.existsSync(possibleFile)) {
-              // Rename to our expected path
-              if (possibleFile !== captionPath) {
-                fs.renameSync(possibleFile, captionPath);
+            await execAsync(command, { 
+              timeout: 60000,
+              env: {
+                ...process.env,
+                TMPDIR: '/tmp',
+                YT_DLP_CACHE_DIR: '/tmp/yt-dlp-cache'
               }
-              captionsDownloaded = true;
-              console.log(`✅ Captions downloaded successfully in ${lang}`);
-              break;
-            }
-          }
+            });
 
-          if (captionsDownloaded) break;
-        } catch (langError) {
-          console.log(`⚠️ Failed to download captions in ${lang}:`, langError.message);
-          continue;
+            // Check for generated caption files
+            const possibleFiles = [
+              `${captionPath.replace(".vtt", "")}.${lang}.vtt`,
+              `${captionPath.replace(".vtt", "")}.en.vtt`,
+              `${captionPath.replace(".vtt", "")}.en-US.vtt`,
+              `${captionPath.replace(".vtt", "")}.vtt`
+            ];
+
+            for (const file of possibleFiles) {
+              if (fs.existsSync(file)) {
+                if (file !== captionPath) {
+                  fs.renameSync(file, captionPath);
+                }
+                console.log(`✅ Captions downloaded successfully: ${strategy.name} (${lang})`);
+                const captions = await this.parseVTTFile(captionPath);
+                await this.cleanupFile(captionPath);
+                return captions;
+              }
+            }
+          } catch (error) {
+            console.log(`⚠️ Caption attempt failed for ${lang}:`, error.message);
+            continue;
+          }
         }
       }
 
-      if (!captionsDownloaded) {
-        throw new Error("No captions available for this video");
-      }
-
-      // Parse the VTT file
-      const captions = await this.parseVTTFile(captionPath);
-
-      // Clean up caption file
-      if (fs.existsSync(captionPath)) {
-        fs.unlinkSync(captionPath);
-      }
-
-      return captions;
+      throw new Error("No captions available for this video");
     } catch (error) {
       console.error("❌ Caption download failed:", error);
-
-      // Clean up caption file if it exists
-      if (fs.existsSync(captionPath)) {
-        fs.unlinkSync(captionPath);
-      }
-
+      await this.cleanupFile(captionPath);
       throw new Error(`Failed to download captions: ${error.message}`);
     }
   }
@@ -242,21 +370,17 @@ class VideoService {
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
 
-        // Skip empty lines and headers
         if (!line || line.startsWith("WEBVTT") || line.startsWith("NOTE")) {
           continue;
         }
 
-        // Check if line contains timestamp
         if (line.includes("-->")) {
           const timeMatch = line.match(/(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})/);
           if (timeMatch) {
-            // Save previous caption if exists
             if (currentCaption && currentCaption.text) {
               captions.push(currentCaption);
             }
 
-            // Start new caption
             currentCaption = {
               start: this.timeToSeconds(timeMatch[1]),
               end: this.timeToSeconds(timeMatch[2]),
@@ -264,24 +388,20 @@ class VideoService {
             };
           }
         } else if (currentCaption && line && !line.match(/^\d+$/)) {
-          // This is caption text (skip cue numbers)
           if (currentCaption.text) {
             currentCaption.text += " ";
           }
-          // Remove HTML tags and clean text
           currentCaption.text += line.replace(/<[^>]*>/g, "").trim();
         }
       }
 
-      // Add the last caption
       if (currentCaption && currentCaption.text) {
         captions.push(currentCaption);
       }
 
       console.log(`✅ Parsed ${captions.length} caption segments`);
 
-      // Create transcript format similar to Whisper
-      const transcript = {
+      return {
         text: captions.map((cap) => cap.text).join(" "),
         segments: captions.map((cap) => ({
           start: cap.start,
@@ -289,8 +409,6 @@ class VideoService {
           text: cap.text,
         })),
       };
-
-      return transcript;
     } catch (error) {
       console.error("❌ Failed to parse VTT file:", error);
       throw error;
@@ -298,7 +416,6 @@ class VideoService {
   }
 
   timeToSeconds(timeString) {
-    // Convert HH:MM:SS.mmm to seconds
     const parts = timeString.split(":");
     const hours = Number.parseInt(parts[0]);
     const minutes = Number.parseInt(parts[1]);
@@ -328,7 +445,7 @@ class VideoService {
           const bitrate = metadata.format.bit_rate;
 
           const videoInfo = {
-            duration: Math.round(duration), // Return as number for easier processing
+            duration: Math.round(duration),
             size: `${Math.round(size / (1024 * 1024))}MB`,
             bitrate: `${Math.round(bitrate / 1000)}kbps`,
           };
@@ -386,14 +503,12 @@ class VideoService {
       const clipPath = path.join(this.tempDir, `${clipId}.mp4`);
 
       console.log(`✂️ Creating video clip: ${startTime}s - ${startTime + duration}s`);
-      console.log(`📁 Clip path: ${clipPath}`);
 
       if (!fs.existsSync(videoPath)) {
         reject(new Error("Video file not found"));
         return;
       }
 
-      // Use more robust approach for clip creation
       ffmpeg(videoPath)
         .seekInput(startTime)
         .inputOptions(["-t", duration.toString()])
@@ -403,7 +518,7 @@ class VideoService {
           "-preset", "fast", 
           "-crf", "28", 
           "-movflags", "+faststart",
-          "-avoid_negative_ts", "make_zero" // Fix timing issues
+          "-avoid_negative_ts", "make_zero"
         ])
         .output(clipPath)
         .on("start", (commandLine) => {
@@ -427,7 +542,6 @@ class VideoService {
     });
   }
 
-  // Utility method to clean up temporary files
   async cleanupTempFiles(filePaths) {
     const cleanupPromises = filePaths.map(async (filePath) => {
       try {
@@ -443,7 +557,6 @@ class VideoService {
     await Promise.all(cleanupPromises);
   }
 
-  // Get video duration quickly without full metadata
   async getVideoDuration(videoPath) {
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(videoPath, (err, metadata) => {
