@@ -40,26 +40,22 @@ RUN google-chrome --version
 # Create app directory
 WORKDIR /app
 
-# Copy package files first (for better caching)
+# Copy package files first (for better Docker layer caching)
 COPY package*.json ./
 
 # Install Node.js dependencies
-# Install all dependencies first (including devDependencies for Puppeteer)
 RUN npm ci
 
 # Download Chromium for Puppeteer (ensures compatibility)
 RUN npx puppeteer browsers install chrome
 
-# Clean up dev dependencies after Puppeteer setup
-RUN npm prune --omit=dev
-
-# Clean npm cache
+# Clean npm cache to reduce image size
 RUN npm cache clean --force
 
 # Copy application code
 COPY . .
 
-# Create non-root user first
+# Create non-root user for security
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
 # Create necessary directories with proper permissions
@@ -67,7 +63,7 @@ RUN mkdir -p /app/uploads /app/output /app/temp /app/cache /app/assets /app/asse
     chmod -R 755 /app/uploads /app/output /app/temp /app/cache /app/assets && \
     chown -R appuser:appgroup /app
 
-# Create a writable home directory for the user (needed for Chrome/Puppeteer)
+# Create writable home directory for Chrome/Puppeteer
 RUN mkdir -p /home/appuser/.config/google-chrome /home/appuser/.cache/puppeteer && \
     chown -R appuser:appgroup /home/appuser
 
@@ -80,11 +76,11 @@ ENV CHROME_PATH="/usr/bin/google-chrome"
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH="/usr/bin/google-chrome"
 
-# Railway specific environment variables
+# Railway environment variables
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Expose port (Railway will set the PORT environment variable)
+# Expose port
 EXPOSE 5000
 
 # Health check for Railway
