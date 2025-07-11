@@ -12,7 +12,7 @@ class VideoService {
     this.uploadDir = path.join(process.cwd(), "uploads");
     this.outputDir = path.join(process.cwd(), "output");
     this.tempDir = path.join(process.cwd(), "temp");
-    this.cacheDir = path.join(process.cwd(), "cache"); // Use local cache directory
+    this.cacheDir = path.join(process.cwd(), "cache");
 
     // ✅ Handle cookies from .env
     const base64Cookie = process.env.YOUTUBE_COOKIES;
@@ -33,12 +33,11 @@ class VideoService {
   }
 
   setupFFmpeg() {
-    ffmpeg.setFfmpegPath("ffmpeg"); // ✅ Use system ffmpeg
-    ffmpeg.setFfprobePath("ffprobe"); // ✅ Use system ffprobe
+    ffmpeg.setFfmpegPath("ffmpeg");
+    ffmpeg.setFfprobePath("ffprobe");
   }
 
   ensureDirectories() {
-    // Ensure all directories exist
     [this.uploadDir, this.outputDir, this.tempDir, this.cacheDir].forEach(
       (dir) => {
         if (!fs.existsSync(dir)) {
@@ -56,68 +55,68 @@ class VideoService {
     console.log("⬇️ Downloading video with enhanced anti-bot measures...");
     console.log("🔗 URL:", youtubeUrl);
 
-    // Enhanced yt-dlp command with anti-bot and permission fixes
-    const ytDlpCommand = [
+    // Build command as array to avoid shell parsing issues
+    const baseArgs = [
       "yt-dlp",
-      ...(fs.existsSync(this.cookiesPath)
-        ? ["--cookies", this.cookiesPath]
-        : []),
-      "--cache-dir",
-      this.cacheDir, // Use local cache directory
       "--no-check-certificate",
       "--geo-bypass",
-      "--user-agent",
-      '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-      "--add-header",
-      "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "--add-header",
-      "Accept-Language:en-US,en;q=0.5",
-      "--add-header",
-      "Accept-Encoding:gzip, deflate",
-      "--add-header",
-      "DNT:1",
-      "--add-header",
-      "Connection:keep-alive",
-      "--add-header",
-      "Upgrade-Insecure-Requests:1",
-      "--add-header",
-      "Sec-Fetch-Dest:document",
-      "--add-header",
-      "Sec-Fetch-Mode:navigate",
-      "--add-header",
-      "Sec-Fetch-Site:none",
-      "--add-header",
-      "Sec-Fetch-User:?1",
-      "--extractor-retries",
-      "5",
-      "--fragment-retries",
-      "5",
-      "--retry-sleep",
-      "3",
-      "--sleep-interval",
-      "2",
-      "--max-sleep-interval",
-      "10",
-      "--socket-timeout",
-      "60",
-      "--format",
-      "best[height<=720]/best[height<=480]/best[ext=mp4]/best[ext=webm]/best", // Try better quality first
-      "--merge-output-format",
-      "mp4",
-      "--output",
-      videoPath,
-      youtubeUrl,
+      "--extractor-retries", "5",
+      "--fragment-retries", "5",
+      "--retry-sleep", "3",
+      "--sleep-interval", "2",
+      "--max-sleep-interval", "10",
+      "--socket-timeout", "60",
+      "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "--format", "best[height<=720]/best[height<=480]/best[ext=mp4]/best[ext=webm]/best",
+      "--merge-output-format", "mp4",
+      "--output", videoPath
     ];
 
-    // Add random delay to avoid rate limiting
-    const randomDelay = Math.floor(Math.random() * 5000) + 2000; // 2-7 seconds
+    // Add cookies if available
+    if (fs.existsSync(this.cookiesPath)) {
+      baseArgs.splice(1, 0, "--cookies", this.cookiesPath);
+    }
+
+    // Add cache directory
+    baseArgs.splice(-2, 0, "--cache-dir", this.cacheDir);
+
+    // Add headers
+    const headers = [
+      "--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "--add-header", "Accept-Language:en-US,en;q=0.5",
+      "--add-header", "Accept-Encoding:gzip, deflate",
+      "--add-header", "DNT:1",
+      "--add-header", "Connection:keep-alive",
+      "--add-header", "Upgrade-Insecure-Requests:1",
+      "--add-header", "Sec-Fetch-Dest:document",
+      "--add-header", "Sec-Fetch-Mode:navigate",
+      "--add-header", "Sec-Fetch-Site:none",
+      "--add-header", "Sec-Fetch-User:?1"
+    ];
+
+    // Insert headers before output and URL
+    baseArgs.splice(-2, 0, ...headers);
+    
+    // Add URL at the end
+    baseArgs.push(youtubeUrl);
+
+    // Random delay to avoid rate limiting
+    const randomDelay = Math.floor(Math.random() * 5000) + 2000;
     console.log(`⏱️ Waiting ${randomDelay}ms before download...`);
     await new Promise((resolve) => setTimeout(resolve, randomDelay));
 
     try {
-      console.log("🔧 Executing command:", ytDlpCommand.join(" "));
-      const { stdout, stderr } = await execAsync(ytDlpCommand.join(" "), {
-        timeout: 180000, // 3 minute timeout
+      console.log("🔧 Executing command:", baseArgs.join(" "));
+      
+      // Use spawn-like approach with execAsync but properly escape arguments
+      const { stdout, stderr } = await execAsync(baseArgs.map(arg => {
+        // Escape arguments that contain spaces or special characters
+        if (arg.includes(' ') || arg.includes('&') || arg.includes('|')) {
+          return `"${arg}"`;
+        }
+        return arg;
+      }).join(" "), {
+        timeout: 180000,
         env: {
           ...process.env,
           PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
@@ -127,7 +126,6 @@ class VideoService {
 
       if (stderr && stderr.includes("ERROR")) {
         console.log("⚠️ Warning in stderr:", stderr);
-        // Don't throw immediately, check if file was created
       }
 
       if (stdout) {
@@ -138,48 +136,45 @@ class VideoService {
     } catch (downloadError) {
       console.log("❌ First download attempt failed:", downloadError.message);
 
-      // Retry with more conservative parameters
-      const fallbackCommand = [
+      // Retry with simpler parameters
+      const fallbackArgs = [
         "yt-dlp",
-        ...(fs.existsSync(this.cookiesPath)
-          ? ["--cookies", this.cookiesPath]
-          : []),
-
-        "--cache-dir",
-        this.cacheDir,
         "--no-check-certificate",
         "--geo-bypass",
-        "--user-agent",
-        '"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"',
-        "--extractor-retries",
-        "3",
-        "--socket-timeout",
-        "30",
-        "--format",
-        "worst[ext=mp4]/worst[ext=webm]/worst",
-        "--merge-output-format",
-        "mp4",
-        "--output",
-        videoPath,
-        youtubeUrl,
+        "--extractor-retries", "3",
+        "--socket-timeout", "30",
+        "--user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+        "--format", "worst[ext=mp4]/worst[ext=webm]/worst",
+        "--merge-output-format", "mp4",
+        "--output", videoPath
       ];
 
+      if (fs.existsSync(this.cookiesPath)) {
+        fallbackArgs.splice(1, 0, "--cookies", this.cookiesPath);
+      }
+
+      fallbackArgs.splice(-2, 0, "--cache-dir", this.cacheDir);
+      fallbackArgs.push(youtubeUrl);
+
       console.log("🔄 Retrying with fallback command...");
-      await new Promise((resolve) => setTimeout(resolve, 8000)); // Wait 8 seconds before retry
+      await new Promise((resolve) => setTimeout(resolve, 8000));
 
       try {
-        console.log("🔧 Fallback command:", fallbackCommand.join(" "));
-        const { stdout: retryStdout, stderr: retryStderr } = await execAsync(
-          fallbackCommand.join(" "),
-          {
-            timeout: 120000,
-            env: {
-              ...process.env,
-              PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
-              PATH: "/opt/venv/bin:" + process.env.PATH,
-            },
+        console.log("🔧 Fallback command:", fallbackArgs.join(" "));
+        
+        const { stdout: retryStdout } = await execAsync(fallbackArgs.map(arg => {
+          if (arg.includes(' ') || arg.includes('&') || arg.includes('|')) {
+            return `"${arg}"`;
           }
-        );
+          return arg;
+        }).join(" "), {
+          timeout: 120000,
+          env: {
+            ...process.env,
+            PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
+            PATH: "/opt/venv/bin:" + process.env.PATH,
+          },
+        });
 
         if (retryStdout) {
           console.log("📤 Retry stdout:", retryStdout);
@@ -189,27 +184,25 @@ class VideoService {
       } catch (retryError) {
         console.error("❌ All download attempts failed:", retryError.message);
 
-        // Try one more time with absolutely minimal parameters
-        const lastResortCommand = [
+        // Last resort with minimal parameters
+        const lastResortArgs = [
           "yt-dlp",
-          ...(fs.existsSync(this.cookiesPath)
-            ? ["--cookies", this.cookiesPath]
-            : []),
-
-          "--no-cache-dir", // Skip cache entirely
           "--no-check-certificate",
-          "--format",
-          "worst",
-          "--output",
-          videoPath,
-          youtubeUrl,
+          "--format", "worst",
+          "--output", videoPath
         ];
 
+        if (fs.existsSync(this.cookiesPath)) {
+          lastResortArgs.splice(1, 0, "--cookies", this.cookiesPath);
+        }
+
+        lastResortArgs.push(youtubeUrl);
+
         console.log("🆘 Last resort attempt...");
-        await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
+        await new Promise((resolve) => setTimeout(resolve, 10000);
 
         try {
-          await execAsync(lastResortCommand.join(" "), {
+          await execAsync(lastResortArgs.join(" "), {
             timeout: 90000,
             env: {
               ...process.env,
@@ -254,40 +247,39 @@ class VideoService {
       console.log("📝 Downloading YouTube captions...");
       console.log("🔗 URL:", youtubeUrl);
 
-      // Try to download captions in different languages
-      const languages = ["en", "en-US", "en-GB", "auto"]; // Try English first, then auto-generated
+      const languages = ["en", "en-US", "en-GB", "auto"];
       let captionsDownloaded = false;
 
       for (const lang of languages) {
         try {
-          // Enhanced caption download command with cache fix
-          const command = [
+          const captionArgs = [
             "yt-dlp",
-            ...(fs.existsSync(this.cookiesPath)
-              ? ["--cookies", this.cookiesPath]
-              : []),
-
-            "--cache-dir",
-            this.cacheDir,
             "--write-subs",
-            "--sub-langs",
-            lang,
-            "--sub-format",
-            "vtt",
+            "--sub-langs", lang,
+            "--sub-format", "vtt",
             "--skip-download",
-            "--user-agent",
-            '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
             "--no-check-certificate",
             "--geo-bypass",
-            "--output",
-            captionPath.replace(".vtt", ""),
-            youtubeUrl,
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "--output", captionPath.replace(".vtt", "")
           ];
 
-          console.log(`🔧 Trying captions in language: ${lang}`);
-          console.log(`🔧 Command: ${command.join(" ")}`);
+          if (fs.existsSync(this.cookiesPath)) {
+            captionArgs.splice(1, 0, "--cookies", this.cookiesPath);
+          }
 
-          const { stdout, stderr } = await execAsync(command.join(" "), {
+          captionArgs.splice(-2, 0, "--cache-dir", this.cacheDir);
+          captionArgs.push(youtubeUrl);
+
+          console.log(`🔧 Trying captions in language: ${lang}`);
+          console.log(`🔧 Command: ${captionArgs.join(" ")}`);
+
+          const { stdout } = await execAsync(captionArgs.map(arg => {
+            if (arg.includes(' ') || arg.includes('&') || arg.includes('|')) {
+              return `"${arg}"`;
+            }
+            return arg;
+          }).join(" "), {
             timeout: 60000,
             env: {
               ...process.env,
@@ -300,7 +292,7 @@ class VideoService {
             console.log("📤 yt-dlp captions stdout:", stdout);
           }
 
-          // Check if caption file was created (yt-dlp adds language suffix)
+          // Check if caption file was created
           const possibleCaptionFiles = [
             `${captionPath.replace(".vtt", "")}.${lang}.vtt`,
             `${captionPath.replace(".vtt", "")}.en.vtt`,
@@ -309,7 +301,6 @@ class VideoService {
 
           for (const possibleFile of possibleCaptionFiles) {
             if (fs.existsSync(possibleFile)) {
-              // Rename to our expected path
               if (possibleFile !== captionPath) {
                 fs.renameSync(possibleFile, captionPath);
               }
@@ -333,10 +324,8 @@ class VideoService {
         throw new Error("No captions available for this video");
       }
 
-      // Parse the VTT file
       const captions = await this.parseVTTFile(captionPath);
 
-      // Clean up caption file
       if (fs.existsSync(captionPath)) {
         fs.unlinkSync(captionPath);
       }
@@ -345,7 +334,6 @@ class VideoService {
     } catch (error) {
       console.error("❌ Caption download failed:", error);
 
-      // Clean up caption file if it exists
       if (fs.existsSync(captionPath)) {
         fs.unlinkSync(captionPath);
       }
@@ -371,23 +359,19 @@ class VideoService {
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
 
-        // Skip empty lines and headers
         if (!line || line.startsWith("WEBVTT") || line.startsWith("NOTE")) {
           continue;
         }
 
-        // Check if line contains timestamp
         if (line.includes("-->")) {
           const timeMatch = line.match(
             /(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})/
           );
           if (timeMatch) {
-            // Save previous caption if exists
             if (currentCaption && currentCaption.text) {
               captions.push(currentCaption);
             }
 
-            // Start new caption
             currentCaption = {
               start: this.timeToSeconds(timeMatch[1]),
               end: this.timeToSeconds(timeMatch[2]),
@@ -395,23 +379,19 @@ class VideoService {
             };
           }
         } else if (currentCaption && line && !line.match(/^\d+$/)) {
-          // This is caption text (skip cue numbers)
           if (currentCaption.text) {
             currentCaption.text += " ";
           }
-          // Remove HTML tags and clean text
           currentCaption.text += line.replace(/<[^>]*>/g, "").trim();
         }
       }
 
-      // Add the last caption
       if (currentCaption && currentCaption.text) {
         captions.push(currentCaption);
       }
 
       console.log(`✅ Parsed ${captions.length} caption segments`);
 
-      // Create transcript format similar to Whisper
       const transcript = {
         text: captions.map((cap) => cap.text).join(" "),
         segments: captions.map((cap) => ({
@@ -429,7 +409,6 @@ class VideoService {
   }
 
   timeToSeconds(timeString) {
-    // Convert HH:MM:SS.mmm to seconds
     const parts = timeString.split(":");
     const hours = Number.parseInt(parts[0]);
     const minutes = Number.parseInt(parts[1]);
@@ -459,7 +438,7 @@ class VideoService {
           const bitrate = metadata.format.bit_rate;
 
           const videoInfo = {
-            duration: Math.round(duration), // Return as number for easier processing
+            duration: Math.round(duration),
             size: `${Math.round(size / (1024 * 1024))}MB`,
             bitrate: `${Math.round(bitrate / 1000)}kbps`,
           };
@@ -528,7 +507,6 @@ class VideoService {
         return;
       }
 
-      // Use more robust approach for clip creation
       ffmpeg(videoPath)
         .seekInput(startTime)
         .inputOptions(["-t", duration.toString()])
@@ -544,7 +522,7 @@ class VideoService {
           "-movflags",
           "+faststart",
           "-avoid_negative_ts",
-          "make_zero", // Fix timing issues
+          "make_zero",
         ])
         .output(clipPath)
         .on("start", (commandLine) => {
@@ -568,7 +546,6 @@ class VideoService {
     });
   }
 
-  // Utility method to clean up temporary files
   async cleanupTempFiles(filePaths) {
     const cleanupPromises = filePaths.map(async (filePath) => {
       try {
@@ -584,7 +561,6 @@ class VideoService {
     await Promise.all(cleanupPromises);
   }
 
-  // Get video duration quickly without full metadata
   async getVideoDuration(videoPath) {
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(videoPath, (err, metadata) => {
