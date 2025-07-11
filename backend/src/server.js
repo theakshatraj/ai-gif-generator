@@ -9,8 +9,6 @@ import fs from "fs-extra"
 dotenv.config()
 
 // 🔐 Reconstruct cookies.txt from env if available (for yt-dlp authentication)
-const cookiesDir = path.join(__dirname, "..", "config")
-const cookiesPath = path.join(cookiesDir, "cookies.txt")
 
 if (process.env.YOUTUBE_COOKIES) {
   try {
@@ -36,6 +34,9 @@ if (process.env.OPENROUTER_API_KEY) {
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+const cookiesDir = path.join(__dirname, "..", "config")
+const cookiesPath = path.join(cookiesDir, "cookies.txt")
 
 const app = express()
 const PORT = process.env.PORT || 5000
