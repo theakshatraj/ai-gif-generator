@@ -8,12 +8,18 @@ import fs from "fs-extra"
 // Load environment variables FIRST
 dotenv.config()
 
-// 🔐 Reconstruct cookies.txt from env if available (for yt-dlp authentication)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const cookiesDir = path.join(__dirname, "..", "config")
+const cookiesPath = path.join(cookiesDir, "cookies.txt")
 
+
+// 🔐 Reconstruct cookies.txt from env if available (for yt-dlp authentication)
 if (process.env.YOUTUBE_COOKIES) {
   try {
     fs.ensureDirSync(cookiesDir)
-    fs.writeFileSync(cookiesPath, process.env.YOUTUBE_COOKIES, "utf-8")
+    const decodedCookies = Buffer.from(process.env.YOUTUBE_COOKIES, "base64").toString("utf-8")
+    fs.writeFileSync(cookiesPath, decodedCookies, "utf-8")
     console.log("✅ YouTube cookies.txt created at:", cookiesPath)
   } catch (err) {
     console.error("❌ Failed to write cookies.txt:", err.message)
@@ -32,11 +38,6 @@ if (process.env.OPENROUTER_API_KEY) {
   console.log("OPENROUTER_API_KEY preview:", process.env.OPENROUTER_API_KEY.substring(0, 20) + "...")
 }
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-const cookiesDir = path.join(__dirname, "..", "config")
-const cookiesPath = path.join(cookiesDir, "cookies.txt")
 
 const app = express()
 const PORT = process.env.PORT || 5000
