@@ -31,13 +31,16 @@ export const generateGifs = async (req, res) => {
     try {
       connectionTest = await aiService.testConnection();
       if (!connectionTest) {
-        console.log("⚠️ OpenRouter connection failed, will use fallback methods");
+        console.log(
+          "⚠️ OpenRouter connection failed, will use fallback methods"
+        );
       }
     } catch (aiError) {
       console.error("❌ AI service connection test failed:", aiError);
       return res.status(500).json({
         success: false,
-        error: "AI service is not available. Please check your OpenRouter API key.",
+        error:
+          "AI service is not available. Please check your OpenRouter API key.",
       });
     }
 
@@ -49,63 +52,61 @@ export const generateGifs = async (req, res) => {
       console.log("📥 Processing YouTube URL...");
 
       try {
-        // Get YouTube data without downloading video
-        const youtubeData = await videoService.getYouTubeData(youtubeUrl);
-        transcript = youtubeData.transcript;
-        videoInfo = youtubeData.videoInfo;
+        // Step 1: Download the actual YouTube video
+        console.log("⬇️ Downloading YouTube video...");
+        const downloadResult = await videoService.downloadFromYoutube(
+          youtubeUrl
+        );
+        videoPath = downloadResult.videoPath;
+        videoInfo = downloadResult.videoInfo;
+        tempFiles.push(videoPath);
 
-        console.log("✅ YouTube data extracted successfully");
+        // Step 2: Get transcript/captions
+        console.log("📝 Getting YouTube captions...");
+        try {
+          transcript = await videoService.downloadYoutubeCaptions(youtubeUrl);
+          console.log("✅ YouTube captions extracted successfully");
+        } catch (captionError) {
+          console.log(
+            "⚠️ Captions not available, will use video analysis fallback"
+          );
+
+          // Fallback: analyze video content if captions fail
+          try {
+            transcript = await videoAnalysisService.analyzeVideoContent(
+              videoPath,
+              videoInfo.duration,
+              prompt
+            );
+            console.log("✅ Video content analysis completed as fallback");
+          } catch (analysisError) {
+            console.error(
+              "❌ Both captions and video analysis failed:",
+              analysisError
+            );
+
+            // Last resort: create basic transcript
+            transcript = {
+              text: "Video content analysis not available",
+              segments: [],
+            };
+          }
+        }
+
+        console.log("✅ YouTube video processed successfully");
+        console.log(`📹 Video duration: ${videoInfo.duration}s`);
         console.log(
           `📝 Transcript preview: ${transcript.text.substring(0, 200)}...`
         );
-
-        // Create placeholder video for GIF generation
-        console.log("🎬 Creating placeholder video for GIF generation...");
-        const placeholderResult = await videoService.createPlaceholderVideo(
-          videoInfo.duration,
-          videoInfo.title
-        );
-        videoPath = placeholderResult.videoPath;
-        tempFiles.push(videoPath);
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError);
-        
+
         // Clean up any temp files created during failed YouTube processing
         await cleanupTempFiles(tempFiles);
-        
+
         return res.status(400).json({
           success: false,
-          error: `Failed to process YouTube video: ${youtubeError.message}. Please try with a different video or upload a file instead.`,
-        });
-      }
-    } else if (uploadedFile) {
-      console.log("📁 Using uploaded file...");
-      videoPath = uploadedFile.path;
-      
-      try {
-        videoInfo = await videoService.getVideoInfo(videoPath);
-
-        // Step 2 (Optional): Enrich prompt with video metadata
-        const enrichedPrompt = `${prompt} — based on the uploaded video titled "${uploadedFile.originalname}"`;
-
-        // For uploaded files, analyze video content with enriched prompt
-        console.log(
-          "🔍 Analyzing uploaded video content with enriched prompt..."
-        );
-        transcript = await videoAnalysisService.analyzeVideoContent(
-          videoPath,
-          videoInfo.duration,
-          enrichedPrompt
-        );
-      } catch (videoError) {
-        console.error("❌ Video processing failed:", videoError);
-        
-        // Clean up uploaded file
-        await cleanupTempFiles([videoPath]);
-        
-        return res.status(400).json({
-          success: false,
-          error: `Failed to process uploaded video: ${videoError.message}. Please try with a different video file.`,
+          error: `Failed to process YouTube video: ${youtubeError.message}. This might be due to video restrictions, private videos, or rate limiting. Please try again later or use a different video.`,
         });
       }
     } else {
@@ -132,10 +133,10 @@ export const generateGifs = async (req, res) => {
       );
     } catch (aiAnalysisError) {
       console.error("❌ AI transcript analysis failed:", aiAnalysisError);
-      
+
       // Clean up temp files
       await cleanupTempFiles(tempFiles);
-      
+
       return res.status(500).json({
         success: false,
         error: `AI analysis failed: ${aiAnalysisError.message}. Please try again or use a different prompt.`,
@@ -147,10 +148,11 @@ export const generateGifs = async (req, res) => {
     if (!moments || moments.length === 0) {
       // Clean up temp files
       await cleanupTempFiles(tempFiles);
-      
+
       return res.status(400).json({
         success: false,
-        error: "No suitable moments found for GIF creation. Try a different prompt or video.",
+        error:
+          "No suitable moments found for GIF creation. Try a different prompt or video.",
       });
     }
 
@@ -172,7 +174,7 @@ export const generateGifs = async (req, res) => {
       } catch (gifError) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, gifError);
         errors.push(`GIF ${i + 1}: ${gifError.message}`);
-        
+
         // Don't fail the entire process if one GIF fails
         // Continue with the next one
       }
@@ -181,7 +183,7 @@ export const generateGifs = async (req, res) => {
     // Clean up temporary files
     console.log("🗑️ Cleaning up temporary files...");
     await cleanupTempFiles(tempFiles);
-    
+
     // Clean up browser instances
     try {
       await videoService.cleanup();
@@ -231,7 +233,7 @@ export const generateGifs = async (req, res) => {
 
     // Clean up temporary files on error
     await cleanupTempFiles(tempFiles);
-    
+
     // Clean up services
     try {
       await videoService.cleanup();
@@ -243,7 +245,7 @@ export const generateGifs = async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || "Failed to generate GIFs",
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };
@@ -251,9 +253,9 @@ export const generateGifs = async (req, res) => {
 // Helper function for cleanup
 async function cleanupTempFiles(files) {
   if (!files || files.length === 0) return;
-  
+
   console.log(`🗑️ Cleaning up ${files.length} temporary files...`);
-  
+
   for (const file of files) {
     try {
       if (fs.existsSync(file)) {
@@ -269,7 +271,7 @@ async function cleanupTempFiles(files) {
 export const getGif = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ID
     if (!id || id.trim().length === 0) {
       return res.status(400).json({
@@ -298,12 +300,12 @@ export const getGif = async (req, res) => {
     res.setHeader("Content-Type", "image/gif");
     res.setHeader("Cache-Control", "public, max-age=31536000");
     res.setHeader("Content-Length", stats.size);
-    
+
     // Use stream for better memory management
     const stream = fs.createReadStream(gifPath);
     stream.pipe(res);
-    
-    stream.on('error', (error) => {
+
+    stream.on("error", (error) => {
       console.error("❌ Error streaming GIF:", error);
       if (!res.headersSent) {
         res.status(500).json({
@@ -312,11 +314,10 @@ export const getGif = async (req, res) => {
         });
       }
     });
-    
   } catch (error) {
     console.error("❌ Error serving GIF:", error);
     console.error("❌ Stack trace:", error.stack);
-    
+
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
