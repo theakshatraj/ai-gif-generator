@@ -5,8 +5,6 @@ import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { promisify } from "util";
 
-this.cookiesPath = path.join(process.cwd(), "config", "cookies.txt");
-
 const execAsync = promisify(exec);
 
 class VideoService {
@@ -17,7 +15,7 @@ class VideoService {
     this.cacheDir = path.join(process.cwd(), "cache"); // Use local cache directory
 
     this.cookiesPath = path.join(process.cwd(), "config", "cookies.txt");
-    
+
     this.setupFFmpeg();
     this.ensureDirectories();
   }
