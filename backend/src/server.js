@@ -65,6 +65,7 @@ app.get("/health", (req, res) => {
     status: "OK",
     message: "AI GIF Generator API is running",
     timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
     configuration: {
       openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
       youtubeApiConfigured: !!process.env.YOUTUBE_API_KEY,
@@ -78,6 +79,20 @@ app.get("/health", (req, res) => {
       aiAnalysis: !!process.env.OPENROUTER_API_KEY,
       gifGeneration: fs.existsSync(fontPath),
     },
+  })
+})
+
+// Root endpoint
+app.get("/", (req, res) => {
+  res.json({ 
+    message: "AI GIF Generator API is running",
+    status: "healthy",
+    endpoints: {
+      health: "/health",
+      testYoutube: "/api/test-youtube",
+      generateGifs: "/api/generate",
+      getGif: "/api/gifs/:id"
+    }
   })
 })
 
@@ -133,6 +148,7 @@ if (process.env.OPENROUTER_API_KEY) {
     console.log("✅ API routes loaded successfully")
   } catch (importError) {
     console.error("❌ Failed to load API routes:", importError)
+    console.error("❌ Stack trace:", importError.stack)
 
     // Provide error endpoint if routes fail to load
     app.use("/api/*", (req, res) => {
@@ -161,31 +177,7 @@ if (process.env.OPENROUTER_API_KEY) {
   })
 }
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error("❌ Server Error:", error)
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-    error: process.env.NODE_ENV === "development" ? error.message : "Something went wrong",
-  })
-})
-
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-    availableEndpoints: [
-      "GET /health - Health check",
-      "GET /api/test-youtube?url=<youtube_url> - Test YouTube service",
-      "POST /api/generate-gifs - Generate GIFs from video",
-      "GET /api/gifs/:id - Get specific GIF",
-    ],
-  })
-})
-
-// Graceful shutdown handler
+// Fix the graceful shutdown handlers - wrap in try-catch
 process.on("SIGTERM", async () => {
   console.log("🛑 SIGTERM received, shutting down gracefully...")
 
@@ -198,7 +190,10 @@ process.on("SIGTERM", async () => {
     console.error("❌ Error during cleanup:", error)
   }
 
-  process.exit(0)
+  // Give it a moment to clean up, then exit
+  setTimeout(() => {
+    process.exit(0)
+  }, 1000)
 })
 
 process.on("SIGINT", async () => {
@@ -213,10 +208,32 @@ process.on("SIGINT", async () => {
     console.error("❌ Error during cleanup:", error)
   }
 
-  process.exit(0)
+  // Give it a moment to clean up, then exit
+  setTimeout(() => {
+    process.exit(0)
+  }, 1000)
 })
+
+// Add uncaught exception handling
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error)
+  console.error('❌ Stack trace:', error.stack)
   
-app.listen(PORT, () => {
+  // Try to cleanup before exiting
+  setTimeout(() => {
+    process.exit(1)
+  }, 1000)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason)
+  console.error('❌ Stack trace:', reason?.stack)
+  
+  // Don't exit on unhandled rejection, just log it
+})
+
+// Start the server with error handling
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(`📁 Upload directory: ${path.join(__dirname, "../uploads")}`)
   console.log(`🎬 Output directory: ${path.join(__dirname, "../output")}`)
@@ -243,4 +260,13 @@ app.listen(PORT, () => {
 
   console.log("\n🎯 Ready to process YouTube videos without yt-dlp!")
   console.log("🧪 Test the YouTube service at: GET /api/test-youtube?url=<youtube_url>")
+})
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('❌ Server error:', error)
+  
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`)
+  }
 })

@@ -18,10 +18,27 @@ export const generateGifs = async (req, res) => {
     console.log("🎥 YouTube URL:", youtubeUrl);
     console.log("📁 Uploaded file:", uploadedFile?.filename);
 
+    // Validate input
+    if (!prompt || prompt.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Prompt is required and cannot be empty",
+      });
+    }
+
     // Test OpenRouter connection first
-    const connectionTest = await aiService.testConnection();
-    if (!connectionTest) {
-      console.log("⚠️ OpenRouter connection failed, will use fallback methods");
+    let connectionTest = false;
+    try {
+      connectionTest = await aiService.testConnection();
+      if (!connectionTest) {
+        console.log("⚠️ OpenRouter connection failed, will use fallback methods");
+      }
+    } catch (aiError) {
+      console.error("❌ AI service connection test failed:", aiError);
+      return res.status(500).json({
+        success: false,
+        error: "AI service is not available. Please check your OpenRouter API key.",
+      });
     }
 
     let videoPath;
@@ -52,6 +69,10 @@ export const generateGifs = async (req, res) => {
         tempFiles.push(videoPath);
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError);
+        
+        // Clean up any temp files created during failed YouTube processing
+        await cleanupTempFiles(tempFiles);
+        
         return res.status(400).json({
           success: false,
           error: `Failed to process YouTube video: ${youtubeError.message}. Please try with a different video or upload a file instead.`,
@@ -60,20 +81,33 @@ export const generateGifs = async (req, res) => {
     } else if (uploadedFile) {
       console.log("📁 Using uploaded file...");
       videoPath = uploadedFile.path;
-      videoInfo = await videoService.getVideoInfo(videoPath);
+      
+      try {
+        videoInfo = await videoService.getVideoInfo(videoPath);
 
-      // Step 2 (Optional): Enrich prompt with video metadata
-      const enrichedPrompt = `${prompt} — based on the uploaded video titled "${uploadedFile.originalname}"`;
+        // Step 2 (Optional): Enrich prompt with video metadata
+        const enrichedPrompt = `${prompt} — based on the uploaded video titled "${uploadedFile.originalname}"`;
 
-      // For uploaded files, analyze video content with enriched prompt
-      console.log(
-        "🔍 Analyzing uploaded video content with enriched prompt..."
-      );
-      transcript = await videoAnalysisService.analyzeVideoContent(
-        videoPath,
-        videoInfo.duration,
-        enrichedPrompt
-      );
+        // For uploaded files, analyze video content with enriched prompt
+        console.log(
+          "🔍 Analyzing uploaded video content with enriched prompt..."
+        );
+        transcript = await videoAnalysisService.analyzeVideoContent(
+          videoPath,
+          videoInfo.duration,
+          enrichedPrompt
+        );
+      } catch (videoError) {
+        console.error("❌ Video processing failed:", videoError);
+        
+        // Clean up uploaded file
+        await cleanupTempFiles([videoPath]);
+        
+        return res.status(400).json({
+          success: false,
+          error: `Failed to process uploaded video: ${videoError.message}. Please try with a different video file.`,
+        });
+      }
     } else {
       return res.status(400).json({
         success: false,
@@ -89,22 +123,38 @@ export const generateGifs = async (req, res) => {
 
     // Analyze transcript with AI
     console.log("🤖 Analyzing transcript with AI...");
-    const moments = await aiService.analyzeTranscriptWithTimestamps(
-      transcript,
-      prompt,
-      Number.parseInt(videoInfo.duration)
-    );
+    let moments;
+    try {
+      moments = await aiService.analyzeTranscriptWithTimestamps(
+        transcript,
+        prompt,
+        Number.parseInt(videoInfo.duration)
+      );
+    } catch (aiAnalysisError) {
+      console.error("❌ AI transcript analysis failed:", aiAnalysisError);
+      
+      // Clean up temp files
+      await cleanupTempFiles(tempFiles);
+      
+      return res.status(500).json({
+        success: false,
+        error: `AI analysis failed: ${aiAnalysisError.message}. Please try again or use a different prompt.`,
+      });
+    }
 
     console.log("🎬 Moments to process:", JSON.stringify(moments, null, 2));
 
     if (!moments || moments.length === 0) {
+      // Clean up temp files
+      await cleanupTempFiles(tempFiles);
+      
       return res.status(400).json({
         success: false,
-        error: "No suitable moments found for GIF creation",
+        error: "No suitable moments found for GIF creation. Try a different prompt or video.",
       });
     }
 
-    // Generate GIFs
+    // Generate GIFs with better error handling
     const gifs = [];
     const errors = [];
 
@@ -119,16 +169,26 @@ export const generateGifs = async (req, res) => {
         const gif = await gifService.createGif(videoPath, moment);
         gifs.push(gif);
         console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`);
-      } catch (error) {
-        console.error(`❌ Failed to create GIF ${i + 1}:`, error);
-        errors.push(`GIF ${i + 1}: ${error.message}`);
+      } catch (gifError) {
+        console.error(`❌ Failed to create GIF ${i + 1}:`, gifError);
+        errors.push(`GIF ${i + 1}: ${gifError.message}`);
+        
+        // Don't fail the entire process if one GIF fails
+        // Continue with the next one
       }
     }
 
     // Clean up temporary files
     console.log("🗑️ Cleaning up temporary files...");
-    await videoService.cleanupTempFiles(tempFiles);
-    await videoService.cleanup(); // Clean up browser instances
+    await cleanupTempFiles(tempFiles);
+    
+    // Clean up browser instances
+    try {
+      await videoService.cleanup();
+    } catch (cleanupError) {
+      console.error("❌ Error during service cleanup:", cleanupError);
+      // Don't fail the response for cleanup errors
+    }
 
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
@@ -167,21 +227,57 @@ export const generateGifs = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ GIF generation failed:", error);
+    console.error("❌ Stack trace:", error.stack);
 
     // Clean up temporary files on error
-    await videoService.cleanupTempFiles(tempFiles);
-    await videoService.cleanup();
+    await cleanupTempFiles(tempFiles);
+    
+    // Clean up services
+    try {
+      await videoService.cleanup();
+    } catch (cleanupError) {
+      console.error("❌ Error during emergency cleanup:", cleanupError);
+    }
 
+    // Send error response
     res.status(500).json({
       success: false,
       error: error.message || "Failed to generate GIFs",
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 };
 
+// Helper function for cleanup
+async function cleanupTempFiles(files) {
+  if (!files || files.length === 0) return;
+  
+  console.log(`🗑️ Cleaning up ${files.length} temporary files...`);
+  
+  for (const file of files) {
+    try {
+      if (fs.existsSync(file)) {
+        await fs.promises.unlink(file);
+        console.log(`✅ Deleted temp file: ${file}`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to delete temp file ${file}:`, error);
+    }
+  }
+}
+
 export const getGif = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Validate ID
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "GIF ID is required",
+      });
+    }
+
     const gifPath = path.join(process.cwd(), "output", `${id}.gif`);
 
     console.log(`📁 Looking for GIF: ${gifPath}`);
@@ -201,12 +297,31 @@ export const getGif = async (req, res) => {
 
     res.setHeader("Content-Type", "image/gif");
     res.setHeader("Cache-Control", "public, max-age=31536000");
-    res.sendFile(path.resolve(gifPath));
+    res.setHeader("Content-Length", stats.size);
+    
+    // Use stream for better memory management
+    const stream = fs.createReadStream(gifPath);
+    stream.pipe(res);
+    
+    stream.on('error', (error) => {
+      console.error("❌ Error streaming GIF:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: "Failed to stream GIF",
+        });
+      }
+    });
+    
   } catch (error) {
     console.error("❌ Error serving GIF:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to serve GIF",
-    });
+    console.error("❌ Stack trace:", error.stack);
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: "Failed to serve GIF",
+      });
+    }
   }
 };
