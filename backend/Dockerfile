@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp with break-system-packages flag
-RUN pip3 install --break-system-packages yt-dlp
+RUN pip3 install --break-system-packages --upgrade pip && \
+    pip3 install --break-system-packages --upgrade yt-dlp
 
 # Copy only package files first for caching
 COPY package*.json ./

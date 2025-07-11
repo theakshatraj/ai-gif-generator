@@ -52,52 +52,31 @@ export const generateGifs = async (req, res) => {
       console.log("📥 Processing YouTube URL...");
 
       try {
-        // Step 1: Download the actual YouTube video
-        console.log("⬇️ Downloading YouTube video...");
-        const downloadResult = await videoService.downloadFromYoutube(
-          youtubeUrl
-        );
-        videoPath = downloadResult.videoPath;
-        videoInfo = downloadResult.videoInfo;
-        tempFiles.push(videoPath);
-
-        // Step 2: Get transcript/captions
-        console.log("📝 Getting YouTube captions...");
-        try {
-          transcript = await videoService.downloadYoutubeCaptions(youtubeUrl);
-          console.log("✅ YouTube captions extracted successfully");
-        } catch (captionError) {
-          console.log(
-            "⚠️ Captions not available, will use video analysis fallback"
+        // Use the hybrid approach instead of downloading video
+        console.log("🔍 Extracting YouTube data using metadata + captions...");
+        const youtubeData = await videoService.getYouTubeData(youtubeUrl);
+        
+        videoInfo = youtubeData.videoInfo;
+        transcript = youtubeData.transcript;
+        
+        // Create a placeholder video file for GIF generation
+        if (youtubeData.isPlaceholder) {
+          console.log("🎬 Creating placeholder video for GIF generation...");
+          const placeholderResult = await videoService.createPlaceholderVideo(
+            videoInfo.duration,
+            videoInfo.title
           );
-
-          // Fallback: analyze video content if captions fail
-          try {
-            transcript = await videoAnalysisService.analyzeVideoContent(
-              videoPath,
-              videoInfo.duration,
-              prompt
-            );
-            console.log("✅ Video content analysis completed as fallback");
-          } catch (analysisError) {
-            console.error(
-              "❌ Both captions and video analysis failed:",
-              analysisError
-            );
-
-            // Last resort: create basic transcript
-            transcript = {
-              text: "Video content analysis not available",
-              segments: [],
-            };
-          }
+          videoPath = placeholderResult.videoPath;
+          tempFiles.push(videoPath);
         }
 
-        console.log("✅ YouTube video processed successfully");
+        console.log("✅ YouTube data processed successfully");
         console.log(`📹 Video duration: ${videoInfo.duration}s`);
+        console.log(`🎬 Video title: ${videoInfo.title}`);
         console.log(
           `📝 Transcript preview: ${transcript.text.substring(0, 200)}...`
         );
+        
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError);
 
@@ -107,6 +86,31 @@ export const generateGifs = async (req, res) => {
         return res.status(400).json({
           success: false,
           error: `Failed to process YouTube video: ${youtubeError.message}. This might be due to video restrictions, private videos, or rate limiting. Please try again later or use a different video.`,
+        });
+      }
+    } else if (uploadedFile) {
+      console.log("📁 Processing uploaded file...");
+      
+      try {
+        videoPath = uploadedFile.path;
+        videoInfo = await videoService.getVideoInfo(videoPath);
+        
+        // Extract transcript from uploaded video using video analysis
+        console.log("🔍 Analyzing uploaded video content...");
+        transcript = await videoAnalysisService.analyzeVideoContent(
+          videoPath,
+          videoInfo.duration,
+          prompt
+        );
+        
+        console.log("✅ Uploaded video processed successfully");
+        
+      } catch (uploadError) {
+        console.error("❌ Uploaded file processing failed:", uploadError);
+        
+        return res.status(400).json({
+          success: false,
+          error: `Failed to process uploaded video: ${uploadError.message}`,
         });
       }
     } else {
@@ -168,9 +172,20 @@ export const generateGifs = async (req, res) => {
 
       try {
         console.log(`🎨 Creating GIF ${i + 1}...`);
-        const gif = await gifService.createGif(videoPath, moment);
-        gifs.push(gif);
-        console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`);
+        
+        // For YouTube videos with placeholder, create text-based GIFs
+        if (youtubeUrl && !uploadedFile) {
+          // Create text-based GIF since we don't have actual video
+          const gif = await gifService.createTextGif(moment, videoInfo);
+          gifs.push(gif);
+          console.log(`✅ Text GIF ${i + 1} created successfully`);
+        } else {
+          // Create normal GIF from actual video
+          const gif = await gifService.createGif(videoPath, moment);
+          gifs.push(gif);
+          console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`);
+        }
+        
       } catch (gifError) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, gifError);
         errors.push(`GIF ${i + 1}: ${gifError.message}`);
@@ -223,7 +238,7 @@ export const generateGifs = async (req, res) => {
       processingTime: `${processingTime}s`,
       videoInfo,
       captionSource: youtubeUrl
-        ? "YouTube Transcript + AI Analysis"
+        ? "YouTube Captions + AI Analysis"
         : "Video Content Analysis",
       errors: errors.length > 0 ? errors : undefined,
     });
