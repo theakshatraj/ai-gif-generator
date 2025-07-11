@@ -10,23 +10,6 @@ dotenv.config()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const cookiesDir = path.join(__dirname, "..", "config")
-const cookiesPath = path.join(cookiesDir, "cookies.txt")
-
-
-// 🔐 Reconstruct cookies.txt from env if available (for yt-dlp authentication)
-if (process.env.YOUTUBE_COOKIES) {
-  try {
-    fs.ensureDirSync(cookiesDir)
-    const decodedCookies = Buffer.from(process.env.YOUTUBE_COOKIES, "base64").toString("utf-8")
-    fs.writeFileSync(cookiesPath, decodedCookies, "utf-8")
-    console.log("✅ YouTube cookies.txt created at:", cookiesPath)
-  } catch (err) {
-    console.error("❌ Failed to write cookies.txt:", err.message)
-  }
-} else {
-  console.log("⚠️ YOUTUBE_COOKIES environment variable not set. Skipping cookies.txt creation.")
-}
 
 // Debug environment variables
 console.log("🔍 Environment Debug:")
@@ -34,16 +17,17 @@ console.log("NODE_ENV:", process.env.NODE_ENV)
 console.log("PORT:", process.env.PORT)
 console.log("OPENROUTER_API_KEY exists:", !!process.env.OPENROUTER_API_KEY)
 console.log("OPENROUTER_API_KEY length:", process.env.OPENROUTER_API_KEY?.length || 0)
+console.log("YOUTUBE_API_KEY exists:", !!process.env.YOUTUBE_API_KEY)
+
 if (process.env.OPENROUTER_API_KEY) {
   console.log("OPENROUTER_API_KEY preview:", process.env.OPENROUTER_API_KEY.substring(0, 20) + "...")
 }
-
 
 const app = express()
 const PORT = process.env.PORT || 5000
 
 // Ensure required directories exist
-const requiredDirs = ["uploads", "output", "temp", "assets", "assets/fonts"]
+const requiredDirs = ["uploads", "output", "temp", "cache", "assets", "assets/fonts"]
 requiredDirs.forEach((dir) => {
   const dirPath = path.join(__dirname, "..", dir)
   fs.ensureDirSync(dirPath)
@@ -75,32 +59,90 @@ app.use("/output", express.static(path.join(__dirname, "../output")))
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")))
 app.use("/assets", express.static(path.join(__dirname, "../assets")))
 
-// Health check (before importing routes that might fail)
+// Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
     status: "OK",
     message: "AI GIF Generator API is running",
     timestamp: new Date().toISOString(),
-    openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
-    fontAvailable: fs.existsSync(fontPath),
-    environment: {
+    configuration: {
+      openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
+      youtubeApiConfigured: !!process.env.YOUTUBE_API_KEY,
+      fontAvailable: fs.existsSync(fontPath),
       nodeEnv: process.env.NODE_ENV,
       port: process.env.PORT,
-      hasOpenRouterKey: !!process.env.OPENROUTER_API_KEY,
-      fontPath: fontPath,
+    },
+    features: {
+      youtubeTranscriptExtraction: true,
+      puppeteerScraping: true,
+      aiAnalysis: !!process.env.OPENROUTER_API_KEY,
+      gifGeneration: fs.existsSync(fontPath),
     },
   })
 })
 
-// Only import and use API routes if environment is properly configured
+// Test endpoint for YouTube service
+app.get("/api/test-youtube", async (req, res) => {
+  try {
+    const testUrl = req.query.url || "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+    // Dynamic import to test YouTube service
+    const { default: youtubeService } = await import("./services/youtubeService.js")
+
+    console.log(`🧪 Testing YouTube service with URL: ${testUrl}`)
+
+    const videoId = youtubeService.extractVideoId(testUrl)
+    if (!videoId) {
+      throw new Error("Invalid YouTube URL")
+    }
+
+    // Test transcript extraction (without full processing)
+    const startTime = Date.now()
+    const transcript = await youtubeService.getVideoTranscript(testUrl)
+    const processingTime = Date.now() - startTime
+
+    res.json({
+      success: true,
+      message: "YouTube service test successful",
+      data: {
+        videoId,
+        transcriptLength: transcript.text.length,
+        segmentCount: transcript.segments.length,
+        processingTime: `${processingTime}ms`,
+        preview: transcript.text.substring(0, 200) + "...",
+      },
+    })
+  } catch (error) {
+    console.error("❌ YouTube service test failed:", error)
+    res.status(500).json({
+      success: false,
+      message: "YouTube service test failed",
+      error: error.message,
+    })
+  }
+})
+
+// Only load API routes if environment is properly configured
 if (process.env.OPENROUTER_API_KEY) {
   console.log("✅ Environment configured, loading API routes...")
 
-  // Dynamic import to ensure environment variables are loaded first
-  const { default: apiRoutes } = await import("./routes/api.js")
-  app.use("/api", apiRoutes)
+  try {
+    // Dynamic import to ensure environment variables are loaded first
+    const { default: apiRoutes } = await import("./routes/api.js")
+    app.use("/api", apiRoutes)
+    console.log("✅ API routes loaded successfully")
+  } catch (importError) {
+    console.error("❌ Failed to load API routes:", importError)
 
-  console.log("✅ API routes loaded successfully")
+    // Provide error endpoint if routes fail to load
+    app.use("/api/*", (req, res) => {
+      res.status(500).json({
+        success: false,
+        message: "API routes failed to load",
+        error: importError.message,
+      })
+    })
+  }
 } else {
   console.log("❌ OPENROUTER_API_KEY not found, API routes disabled")
 
@@ -110,6 +152,11 @@ if (process.env.OPENROUTER_API_KEY) {
       success: false,
       message: "API not available - OPENROUTER_API_KEY not configured",
       error: "Please check your .env file and ensure OPENROUTER_API_KEY is set",
+      requiredEnvVars: {
+        OPENROUTER_API_KEY: "Required for AI analysis",
+        YOUTUBE_API_KEY: "Optional - for YouTube Data API fallback",
+        FRONTEND_URL: "Optional - defaults to http://localhost:5173",
+      },
     })
   })
 }
@@ -129,19 +176,63 @@ app.use("*", (req, res) => {
   res.status(404).json({
     success: false,
     message: "Route not found",
+    availableEndpoints: [
+      "GET /health - Health check",
+      "GET /api/test-youtube?url=<youtube_url> - Test YouTube service",
+      "POST /api/generate-gifs - Generate GIFs from video",
+      "GET /api/gifs/:id - Get specific GIF",
+    ],
   })
+})
+
+// Graceful shutdown handler
+process.on("SIGTERM", async () => {
+  console.log("🛑 SIGTERM received, shutting down gracefully...")
+
+  try {
+    // Clean up YouTube service (close browser instances)
+    const { default: youtubeService } = await import("./services/youtubeService.js")
+    await youtubeService.cleanup()
+    console.log("✅ YouTube service cleanup completed")
+  } catch (error) {
+    console.error("❌ Error during cleanup:", error)
+  }
+
+  process.exit(0)
+})
+
+process.on("SIGINT", async () => {
+  console.log("🛑 SIGINT received, shutting down gracefully...")
+
+  try {
+    // Clean up YouTube service (close browser instances)
+    const { default: youtubeService } = await import("./services/youtubeService.js")
+    await youtubeService.cleanup()
+    console.log("✅ YouTube service cleanup completed")
+  } catch (error) {
+    console.error("❌ Error during cleanup:", error)
+  }
+
+  process.exit(0)
 })
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(`📁 Upload directory: ${path.join(__dirname, "../uploads")}`)
   console.log(`🎬 Output directory: ${path.join(__dirname, "../output")}`)
+  console.log(`💾 Cache directory: ${path.join(__dirname, "../cache")}`)
   console.log(`🔤 Font directory: ${path.join(__dirname, "../assets/fonts")}`)
 
+  // Configuration warnings
   if (!process.env.OPENROUTER_API_KEY) {
     console.log("⚠️  WARNING: OPENROUTER_API_KEY not found!")
     console.log("⚠️  Please check your .env file in the backend directory")
     console.log("⚠️  API endpoints will not work until this is configured")
+  }
+
+  if (!process.env.YOUTUBE_API_KEY) {
+    console.log("ℹ️  INFO: YOUTUBE_API_KEY not found (optional)")
+    console.log("ℹ️  YouTube transcript extraction will use alternative methods")
   }
 
   if (!fs.existsSync(fontPath)) {
@@ -149,4 +240,7 @@ app.listen(PORT, () => {
     console.log("⚠️  Please add the font file to assets/fonts/ directory")
     console.log("⚠️  GIFs will be created without captions until font is available")
   }
+
+  console.log("\n🎯 Ready to process YouTube videos without yt-dlp!")
+  console.log("🧪 Test the YouTube service at: GET /api/test-youtube?url=<youtube_url>")
 })
