@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import videoService from "../services/videoServiceUpdated.js";
+import videoService from "../services/videoService.js";
 import videoAnalysisService from "../services/videoAnalysisService.js";
 import aiService from "../services/aiService.js";
 import gifService from "../services/gifService.js";
