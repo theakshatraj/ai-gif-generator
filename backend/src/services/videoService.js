@@ -60,7 +60,7 @@ class VideoService {
         timeout: 120000, // 2 minutes timeout for download
       })
       if (stdout) console.log("📤 yt-dlp stdout:", stdout)
-      if (stderr) console.error("❌ yt-dlp stderr:", stderr)
+      if (stderr) console.error("❌ yt-dlp stderr:", stderr) // Log stderr for debugging
 
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
         console.log(`✅ YouTube video downloaded successfully to: ${outputPath}`)
@@ -153,8 +153,9 @@ class VideoService {
           const size = metadata.format.size
           const bitrate = metadata.format.bit_rate
           const videoStream = metadata.streams.find((s) => s.codec_type === "video")
-          const width = videoStream?.width || 640 // Get video width
-          const height = videoStream?.height || 360 // Get video height
+          // Provide default width/height if not found
+          const width = videoStream?.width || 640
+          const height = videoStream?.height || 360
 
           const videoInfo = {
             duration: Math.round(duration),

@@ -45,22 +45,23 @@ class GifService {
       throw new Error(`Video not found: ${videoPath}`)
     }
 
-    // Default width if videoInfo.width is not available
+    // Use videoInfo dimensions or sensible defaults
     const width = videoInfo?.width || 400
+    const height = videoInfo?.height || 225 // Default aspect ratio 16:9
 
-    let command = `${this.ffmpegPath} -ss ${moment.startTime} -i "${videoPath}" -t ${duration} -vf "fps=10,scale=${width}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${outputPath}"`
+    let command = `${this.ffmpegPath} -ss ${moment.startTime} -i "${videoPath}" -t ${duration} -vf "fps=10,scale=${width}:${height}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${outputPath}"`
 
     if (moment.caption && fs.existsSync(this.fontPath)) {
       const cleanCaption = moment.caption.replace(/['"]/g, "").replace(/:/g, "").substring(0, 100) // Limit caption length for display
       const fontSize = 24
-      command = `${this.ffmpegPath} -ss ${moment.startTime} -i "${videoPath}" -t ${duration} -vf "fps=10,scale=${width}:-1:flags=lanczos,drawtext=text='${cleanCaption}':fontfile='${this.fontPath.replace(/\\/g, "/")}':fontsize=${fontSize}:fontcolor=white:x=(w-text_w)/2:y=h-line_h-10:box=1:boxcolor=black@0.7:boxborderw=2,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${outputPath}"`
+      command = `${this.ffmpegPath} -ss ${moment.startTime} -i "${videoPath}" -t ${duration} -vf "fps=10,scale=${width}:${height}:flags=lanczos,drawtext=text='${cleanCaption}':fontfile='${this.fontPath.replace(/\\/g, "/")}':fontsize=${fontSize}:fontcolor=white:x=(w-text_w)/2:y=h-line_h-10:box=1:boxcolor=black@0.7:boxborderw=2,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${outputPath}"`
     } else if (moment.caption && !fs.existsSync(this.fontPath)) {
       console.warn(
         `⚠️ Font file not found at ${this.fontPath}. GIFs will be generated without custom font, but with default text if possible.`,
       )
       const cleanCaption = moment.caption.replace(/['"]/g, "").replace(/:/g, "").substring(0, 100)
       const fontSize = 24
-      command = `${this.ffmpegPath} -ss ${moment.startTime} -i "${videoPath}" -t ${duration} -vf "fps=10,scale=${width}:-1:flags=lanczos,drawtext=text='${cleanCaption}':fontsize=${fontSize}:fontcolor=white:x=(w-text_w)/2:y=h-line_h-10:box=1:boxcolor=black@0.7:boxborderw=2,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${outputPath}"`
+      command = `${this.ffmpegPath} -ss ${moment.startTime} -i "${videoPath}" -t ${duration} -vf "fps=10,scale=${width}:${height}:flags=lanczos,drawtext=text='${cleanCaption}':fontsize=${fontSize}:fontcolor=white:x=(w-text_w)/2:y=h-line_h-10:box=1:boxcolor=black@0.7:boxborderw=2,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${outputPath}"`
     }
 
     console.log(`🎨 Creating GIF...`)
@@ -101,14 +102,14 @@ class GifService {
     const backgroundColor = "black" // Or any other color
     const textColor = "white"
     const fontSize = 24
-    const width = 400
-    const height = 200
+    const width = videoInfo?.width || 400 // Use videoInfo width or default
+    const height = videoInfo?.height || 200 // Use videoInfo height or default
 
-    let command = `${this.ffmpegPath} -f lavfi -i color=${backgroundColor}:s=${width}x${height}:d=${duration} -vf "drawtext=text='${cleanCaption}':fontfile='${this.fontPath.replace(/\\/g, "/")}':fontsize=${fontSize}:fontcolor=${textColor}:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=2,fps=10,scale=${width}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -y "${outputPath}"`
+    let command = `${this.ffmpegPath} -f lavfi -i color=${backgroundColor}:s=${width}x${height}:d=${duration} -vf "drawtext=text='${cleanCaption}':fontfile='${this.fontPath.replace(/\\/g, "/")}':fontsize=${fontSize}:fontcolor=${textColor}:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=2,fps=10,scale=${width}:${height}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -y "${outputPath}"`
 
     if (!fs.existsSync(this.fontPath)) {
       console.warn(`⚠️ Font file not found at ${this.fontPath}. Text GIFs will be generated without custom font.`)
-      command = `${this.ffmpegPath} -f lavfi -i color=${backgroundColor}:s=${width}x${height}:d=${duration} -vf "drawtext=text='${cleanCaption}':fontsize=${fontSize}:fontcolor=${textColor}:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=2,fps=10,scale=${width}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -y "${outputPath}"`
+      command = `${this.ffmpegPath} -f lavfi -i color=${backgroundColor}:s=${width}x${height}:d=${duration} -vf "drawtext=text='${cleanCaption}':fontsize=${fontSize}:fontcolor=${textColor}:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=2,fps=10,scale=${width}:${height}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -y "${outputPath}"`
     }
 
     console.log(`🎨 Creating text GIF...`)
