@@ -14,7 +14,19 @@ class VideoService {
     this.tempDir = path.join(process.cwd(), "temp");
     this.cacheDir = path.join(process.cwd(), "cache"); // Use local cache directory
 
-    this.cookiesPath = path.join(process.cwd(), "config", "cookies.txt");
+    // ✅ Handle cookies from .env
+    const base64Cookie = process.env.YOUTUBE_COOKIES;
+    if (base64Cookie) {
+      const decoded = Buffer.from(base64Cookie, "base64").toString("utf-8");
+      this.cookiesPath = path.join(this.tempDir, "cookies.txt");
+      fs.writeFileSync(this.cookiesPath, decoded);
+      console.log("✅ Wrote cookies.txt from base64 .env");
+    } else {
+      this.cookiesPath = path.join(process.cwd(), "config", "cookies.txt");
+      console.warn(
+        "⚠️ No YOUTUBE_COOKIES found in .env; fallback to config/cookies.txt"
+      );
+    }
 
     this.setupFFmpeg();
     this.ensureDirectories();
