@@ -20,7 +20,9 @@
     "fs-extra": "^11.2.0",
     "multer": "^1.4.5-lts.1",
     "openai": "^4.63.0",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "puppeteer": "^21.6.1",
+    "youtube-transcript": "^1.0.6"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
@@ -29,14 +31,7 @@
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
   },
-  "keywords": [
-    "ai",
-    "gif",
-    "generator",
-    "youtube",
-    "ffmpeg",
-    "video-processing"
-  ],
+  "keywords": ["ai", "gif", "generator", "youtube", "ffmpeg", "video-processing"],
   "author": "Your Name",
   "license": "MIT",
   "repository": {
