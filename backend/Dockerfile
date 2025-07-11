@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install yt-dlp from master branch with break-system-packages flag
 RUN pip3 install --break-system-packages --upgrade pip && \
-    pip3 install --break-system-packages --upgrade git+https://github.com/yt-dlp/yt-dlp.git@master
+    pip3 install --break-system-packages --upgrade --force-reinstall git+https://github.com/yt-dlp/yt-dlp.git@master
 
 # Copy only package files first for caching
 COPY package*.json ./
@@ -45,7 +45,7 @@ EXPOSE 5000
 
 # Health check for platforms like Railway
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
 
 # Start app
 CMD ["npm", "start"]
