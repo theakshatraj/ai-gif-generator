@@ -1,18 +1,46 @@
+# Node modules (will be installed in container)
 node_modules
-npm-debug.log
+npm-debug.log*
+
+# Runtime directories (will be created in container)
+uploads
+output
+temp
+cache
+config
+
+# Development files
+.env.local
+.env.development
+*.log
+
+# Git
 .git
 .gitignore
+
+# Documentation
 README.md
-.env
-.env.local
-.env.production
-.env.staging
-Dockerfile
-.dockerignore
-uploads/*
-output/*
-temp/*
-*.log
+*.md
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Test files
+test
+tests
+*.test.js
+*.spec.js
+
+# Coverage reports
 coverage
-.nyc_output
+
+# Temporary files
+*.tmp
+*.temp
