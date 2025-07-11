@@ -8,6 +8,22 @@ import fs from "fs-extra"
 // Load environment variables FIRST
 dotenv.config()
 
+// 🔐 Reconstruct cookies.txt from env if available (for yt-dlp authentication)
+const cookiesDir = path.join(__dirname, "..", "config")
+const cookiesPath = path.join(cookiesDir, "cookies.txt")
+
+if (process.env.YOUTUBE_COOKIES) {
+  try {
+    fs.ensureDirSync(cookiesDir)
+    fs.writeFileSync(cookiesPath, process.env.YOUTUBE_COOKIES, "utf-8")
+    console.log("✅ YouTube cookies.txt created at:", cookiesPath)
+  } catch (err) {
+    console.error("❌ Failed to write cookies.txt:", err.message)
+  }
+} else {
+  console.log("⚠️ YOUTUBE_COOKIES environment variable not set. Skipping cookies.txt creation.")
+}
+
 // Debug environment variables
 console.log("🔍 Environment Debug:")
 console.log("NODE_ENV:", process.env.NODE_ENV)

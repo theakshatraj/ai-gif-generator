@@ -42,3 +42,5 @@ frontend/dist/
 # Misc
 *.sqlite3
 *.db
+
+backend/config/cookies.txt
