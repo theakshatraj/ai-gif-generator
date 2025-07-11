@@ -324,6 +324,82 @@ class VideoService {
       throw new Error(`Failed to download captions: ${error.message}`);
     }
   }
+  async getYouTubeData(youtubeUrl) {
+  try {
+    console.log("🔍 Extracting YouTube data without downloading video...");
+    
+    // First, try to get captions/transcript
+    let transcript;
+    try {
+      transcript = await this.downloadYoutubeCaptions(youtubeUrl);
+      console.log("✅ YouTube captions extracted successfully");
+    } catch (captionError) {
+      console.log("⚠️ Failed to get captions:", captionError.message);
+      
+      // If captions fail, create a basic transcript structure
+      transcript = {
+        text: "No captions available for this video",
+        segments: []
+      };
+    }
+
+    // Get basic video info using yt-dlp without downloading
+    let videoInfo;
+    try {
+      console.log("📊 Getting YouTube video metadata...");
+      
+      const command = [
+        "yt-dlp",
+        "--cache-dir", this.cacheDir,
+        "--no-check-certificate",
+        "--geo-bypass",
+        "--print", "title,duration,view_count,description",
+        "--no-download",
+        "--user-agent", '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+        youtubeUrl
+      ];
+
+      const { stdout } = await execAsync(command.join(" "), {
+        timeout: 30000,
+        env: {
+          ...process.env,
+          PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
+          PATH: "/opt/venv/bin:" + process.env.PATH,
+        },
+      });
+
+      const lines = stdout.trim().split('\n');
+      videoInfo = {
+        title: lines[0] || "Unknown Title",
+        duration: parseInt(lines[1]) || 60, // Default to 60 seconds if parsing fails
+        views: lines[2] || "Unknown",
+        description: lines[3] || "No description available"
+      };
+
+      console.log("✅ YouTube metadata extracted:", videoInfo);
+      
+    } catch (metadataError) {
+      console.log("⚠️ Failed to get video metadata:", metadataError.message);
+      
+      // Fallback video info
+      videoInfo = {
+        title: "YouTube Video",
+        duration: 60, // Default duration
+        views: "Unknown",
+        description: "Unable to fetch video details"
+      };
+    }
+
+    return {
+      transcript,
+      videoInfo
+    };
+    
+  } catch (error) {
+    console.error("❌ Failed to get YouTube data:", error);
+    throw new Error(`Failed to extract YouTube data: ${error.message}`);
+  }
+}
 
   async parseVTTFile(vttPath) {
     try {
