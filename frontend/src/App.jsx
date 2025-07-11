@@ -311,7 +311,9 @@ function App() {
                 <button
                   onClick={handleGenerate}
                   disabled={
-                    !prompt || loading || !serverStatus?.openrouterConfigured
+                    !prompt ||
+                    loading ||
+                    serverStatus?.openrouterConfigured === false
                   }
                   className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                 >
