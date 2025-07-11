@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import ffmpeg from "fluent-ffmpeg";
 import path from "path";
 import fs from "fs";
@@ -14,7 +14,7 @@ class VideoService {
     this.tempDir = path.join(process.cwd(), "temp");
     this.cacheDir = path.join(process.cwd(), "cache");
 
-    // ✅ Handle cookies from .env
+    // Handle cookies from .env
     const base64Cookie = process.env.YOUTUBE_COOKIES;
     if (base64Cookie) {
       const decoded = Buffer.from(base64Cookie, "base64").toString("utf-8");
@@ -48,6 +48,54 @@ class VideoService {
     );
   }
 
+  // New method to run yt-dlp with spawn for better control
+  async runYtDlp(args, timeout = 180000) {
+    return new Promise((resolve, reject) => {
+      console.log("🔧 Running yt-dlp with args:", args.join(" "));
+      
+      const child = spawn("yt-dlp", args, {
+        env: {
+          ...process.env,
+          PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
+          PATH: "/opt/venv/bin:" + process.env.PATH,
+        },
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+        console.log("📤 yt-dlp:", data.toString().trim());
+      });
+
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.error("📤 yt-dlp stderr:", data.toString().trim());
+      });
+
+      const timeoutId = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`yt-dlp timeout after ${timeout}ms`));
+      }, timeout);
+
+      child.on('close', (code) => {
+        clearTimeout(timeoutId);
+        if (code === 0) {
+          resolve({ stdout, stderr });
+        } else {
+          reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
+        }
+      });
+
+      child.on('error', (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+    });
+  }
+
   async downloadFromYoutube(youtubeUrl) {
     const videoId = uuidv4();
     const videoPath = path.join(this.tempDir, `${videoId}.mp4`);
@@ -55,188 +103,155 @@ class VideoService {
     console.log("⬇️ Downloading video with enhanced anti-bot measures...");
     console.log("🔗 URL:", youtubeUrl);
 
-    // Build command as array to avoid shell parsing issues
-    const baseArgs = [
-      "yt-dlp",
-      "--no-check-certificate",
-      "--geo-bypass",
-      "--extractor-retries", "5",
-      "--fragment-retries", "5",
-      "--retry-sleep", "3",
-      "--sleep-interval", "2",
-      "--max-sleep-interval", "10",
-      "--socket-timeout", "60",
-      "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "--format", "best[height<=720]/best[height<=480]/best[ext=mp4]/best[ext=webm]/best",
-      "--merge-output-format", "mp4",
-      "--output", videoPath
+    // Strategy 1: Try with cookies-from-browser (most reliable)
+    const strategies = [
+      {
+        name: "cookies-from-browser",
+        args: this.buildCookiesFromBrowserArgs(videoPath, youtubeUrl),
+        timeout: 180000
+      },
+      {
+        name: "fresh-cookies",
+        args: this.buildFreshCookiesArgs(videoPath, youtubeUrl),
+        timeout: 150000
+      },
+      {
+        name: "no-cookies",
+        args: this.buildNoCookiesArgs(videoPath, youtubeUrl),
+        timeout: 120000
+      },
+      {
+        name: "minimal",
+        args: this.buildMinimalArgs(videoPath, youtubeUrl),
+        timeout: 90000
+      }
     ];
 
-    // Add cookies if available
-    if (fs.existsSync(this.cookiesPath)) {
-      baseArgs.splice(1, 0, "--cookies", this.cookiesPath);
+    for (const strategy of strategies) {
+      try {
+        console.log(`🔄 Trying strategy: ${strategy.name}`);
+        
+        // Random delay to avoid rate limiting
+        const randomDelay = Math.floor(Math.random() * 3000) + 1000;
+        console.log(`⏱️ Waiting ${randomDelay}ms before download...`);
+        await new Promise((resolve) => setTimeout(resolve, randomDelay));
+
+        await this.runYtDlp(strategy.args, strategy.timeout);
+
+        // Verify file was created and is not empty
+        if (fs.existsSync(videoPath) && fs.statSync(videoPath).size > 0) {
+          console.log("✅ Video downloaded successfully");
+          const stats = fs.statSync(videoPath);
+          console.log(`📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+          
+          return {
+            videoPath,
+            videoInfo: await this.getVideoInfo(videoPath),
+          };
+        }
+      } catch (error) {
+        console.log(`❌ Strategy ${strategy.name} failed:`, error.message);
+        
+        // Clean up partial files
+        if (fs.existsSync(videoPath)) {
+          fs.unlinkSync(videoPath);
+        }
+        
+        // If this is the last strategy, throw the error
+        if (strategy === strategies[strategies.length - 1]) {
+          throw new Error(`Failed to download video after all attempts: ${error.message}`);
+        }
+        
+        // Wait before trying next strategy
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
     }
 
-    // Add cache directory
-    baseArgs.splice(-2, 0, "--cache-dir", this.cacheDir);
+    throw new Error("All download strategies failed");
+  }
 
-    // Add headers
-    const headers = [
+  buildCookiesFromBrowserArgs(videoPath, youtubeUrl) {
+    const args = [
+      "--cookies-from-browser", "chrome",
+      "--no-check-certificate",
+      "--geo-bypass",
+      "--extractor-retries", "3",
+      "--fragment-retries", "3",
+      "--retry-sleep", "2",
+      "--sleep-interval", "1",
+      "--max-sleep-interval", "5",
+      "--socket-timeout", "30",
+      "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "--referer", "https://www.youtube.com/",
+      "--format", "best[height<=720][ext=mp4]/best[height<=480][ext=mp4]/best[ext=mp4]/best[ext=webm]/best",
+      "--merge-output-format", "mp4",
+      "--cache-dir", this.cacheDir,
+      "--output", videoPath,
+      youtubeUrl
+    ];
+
+    return args;
+  }
+
+  buildFreshCookiesArgs(videoPath, youtubeUrl) {
+    const args = [
+      "--no-check-certificate",
+      "--geo-bypass",
+      "--extractor-retries", "3",
+      "--fragment-retries", "3",
+      "--retry-sleep", "2",
+      "--sleep-interval", "1",
+      "--max-sleep-interval", "5",
+      "--socket-timeout", "30",
+      "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "--referer", "https://www.youtube.com/",
       "--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       "--add-header", "Accept-Language:en-US,en;q=0.5",
-      "--add-header", "Accept-Encoding:gzip, deflate",
+      "--add-header", "Accept-Encoding:gzip, deflate, br",
       "--add-header", "DNT:1",
       "--add-header", "Connection:keep-alive",
       "--add-header", "Upgrade-Insecure-Requests:1",
       "--add-header", "Sec-Fetch-Dest:document",
       "--add-header", "Sec-Fetch-Mode:navigate",
       "--add-header", "Sec-Fetch-Site:none",
-      "--add-header", "Sec-Fetch-User:?1"
+      "--add-header", "Sec-Fetch-User:?1",
+      "--format", "best[height<=720][ext=mp4]/best[height<=480][ext=mp4]/best[ext=mp4]/best[ext=webm]/best",
+      "--merge-output-format", "mp4",
+      "--cache-dir", this.cacheDir,
+      "--output", videoPath
     ];
 
-    // Insert headers before output and URL
-    baseArgs.splice(-2, 0, ...headers);
-    
-    // Add URL at the end
-    baseArgs.push(youtubeUrl);
-
-    // Random delay to avoid rate limiting
-    const randomDelay = Math.floor(Math.random() * 5000) + 2000;
-    console.log(`⏱️ Waiting ${randomDelay}ms before download...`);
-    await new Promise((resolve) => setTimeout(resolve, randomDelay));
-
-    try {
-      console.log("🔧 Executing command:", baseArgs.join(" "));
-      
-      // Use spawn-like approach with execAsync but properly escape arguments
-      const { stdout, stderr } = await execAsync(baseArgs.map(arg => {
-        // Escape arguments that contain spaces or special characters
-        if (arg.includes(' ') || arg.includes('&') || arg.includes('|')) {
-          return `"${arg}"`;
-        }
-        return arg;
-      }).join(" "), {
-        timeout: 180000,
-        env: {
-          ...process.env,
-          PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
-          PATH: "/opt/venv/bin:" + process.env.PATH,
-        },
-      });
-
-      if (stderr && stderr.includes("ERROR")) {
-        console.log("⚠️ Warning in stderr:", stderr);
-      }
-
-      if (stdout) {
-        console.log("📤 yt-dlp stdout:", stdout);
-      }
-
-      console.log("✅ Video downloaded successfully");
-    } catch (downloadError) {
-      console.log("❌ First download attempt failed:", downloadError.message);
-
-      // Retry with simpler parameters
-      const fallbackArgs = [
-        "yt-dlp",
-        "--no-check-certificate",
-        "--geo-bypass",
-        "--extractor-retries", "3",
-        "--socket-timeout", "30",
-        "--user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-        "--format", "worst[ext=mp4]/worst[ext=webm]/worst",
-        "--merge-output-format", "mp4",
-        "--output", videoPath
-      ];
-
-      if (fs.existsSync(this.cookiesPath)) {
-        fallbackArgs.splice(1, 0, "--cookies", this.cookiesPath);
-      }
-
-      fallbackArgs.splice(-2, 0, "--cache-dir", this.cacheDir);
-      fallbackArgs.push(youtubeUrl);
-
-      console.log("🔄 Retrying with fallback command...");
-      await new Promise((resolve) => setTimeout(resolve, 8000));
-
-      try {
-        console.log("🔧 Fallback command:", fallbackArgs.join(" "));
-        
-        const { stdout: retryStdout } = await execAsync(fallbackArgs.map(arg => {
-          if (arg.includes(' ') || arg.includes('&') || arg.includes('|')) {
-            return `"${arg}"`;
-          }
-          return arg;
-        }).join(" "), {
-          timeout: 120000,
-          env: {
-            ...process.env,
-            PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
-            PATH: "/opt/venv/bin:" + process.env.PATH,
-          },
-        });
-
-        if (retryStdout) {
-          console.log("📤 Retry stdout:", retryStdout);
-        }
-
-        console.log("✅ Video downloaded on retry");
-      } catch (retryError) {
-        console.error("❌ All download attempts failed:", retryError.message);
-
-        // Last resort with minimal parameters
-        const lastResortArgs = [
-          "yt-dlp",
-          "--no-check-certificate",
-          "--format", "worst",
-          "--output", videoPath
-        ];
-
-        if (fs.existsSync(this.cookiesPath)) {
-          lastResortArgs.splice(1, 0, "--cookies", this.cookiesPath);
-        }
-
-        lastResortArgs.push(youtubeUrl);
-
-        console.log("🆘 Last resort attempt...");
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-
-        try {
-          await execAsync(lastResortArgs.join(" "), {
-            timeout: 90000,
-            env: {
-              ...process.env,
-              PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
-              PATH: "/opt/venv/bin:" + process.env.PATH,
-            },
-          });
-          console.log("✅ Video downloaded on last resort");
-        } catch (lastError) {
-          throw new Error(
-            `Failed to download video after all attempts: ${lastError.message}`
-          );
-        }
-      }
+    // Add cookies if available
+    if (fs.existsSync(this.cookiesPath)) {
+      args.splice(0, 0, "--cookies", this.cookiesPath);
     }
 
-    // Verify file was created and is not empty
-    if (!fs.existsSync(videoPath)) {
-      throw new Error("Video file was not created");
-    }
+    args.push(youtubeUrl);
+    return args;
+  }
 
-    const stats = fs.statSync(videoPath);
-    if (stats.size === 0) {
-      throw new Error("Downloaded video file is empty");
-    }
+  buildNoCookiesArgs(videoPath, youtubeUrl) {
+    return [
+      "--no-check-certificate",
+      "--geo-bypass",
+      "--extractor-retries", "2",
+      "--socket-timeout", "30",
+      "--user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "--format", "worst[height<=480][ext=mp4]/worst[ext=mp4]/worst[ext=webm]/worst",
+      "--merge-output-format", "mp4",
+      "--cache-dir", this.cacheDir,
+      "--output", videoPath,
+      youtubeUrl
+    ];
+  }
 
-    console.log(
-      `📁 Video file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`
-    );
-
-    return {
-      videoPath,
-      videoInfo: await this.getVideoInfo(videoPath),
-    };
+  buildMinimalArgs(videoPath, youtubeUrl) {
+    return [
+      "--no-check-certificate",
+      "--format", "worst",
+      "--output", videoPath,
+      youtubeUrl
+    ];
   }
 
   async downloadYoutubeCaptions(youtubeUrl) {
@@ -253,7 +268,6 @@ class VideoService {
       for (const lang of languages) {
         try {
           const captionArgs = [
-            "yt-dlp",
             "--write-subs",
             "--sub-langs", lang,
             "--sub-format", "vtt",
@@ -261,35 +275,21 @@ class VideoService {
             "--no-check-certificate",
             "--geo-bypass",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "--output", captionPath.replace(".vtt", "")
+            "--cache-dir", this.cacheDir,
+            "--output", captionPath.replace(".vtt", ""),
+            youtubeUrl
           ];
 
-          if (fs.existsSync(this.cookiesPath)) {
-            captionArgs.splice(1, 0, "--cookies", this.cookiesPath);
-          }
-
-          captionArgs.splice(-2, 0, "--cache-dir", this.cacheDir);
-          captionArgs.push(youtubeUrl);
-
-          console.log(`🔧 Trying captions in language: ${lang}`);
-          console.log(`🔧 Command: ${captionArgs.join(" ")}`);
-
-          const { stdout } = await execAsync(captionArgs.map(arg => {
-            if (arg.includes(' ') || arg.includes('&') || arg.includes('|')) {
-              return `"${arg}"`;
+          // Try cookies-from-browser first
+          try {
+            const browserArgs = ["--cookies-from-browser", "chrome", ...captionArgs];
+            await this.runYtDlp(browserArgs, 60000);
+          } catch (browserError) {
+            // Fallback to file cookies if available
+            if (fs.existsSync(this.cookiesPath)) {
+              captionArgs.splice(0, 0, "--cookies", this.cookiesPath);
             }
-            return arg;
-          }).join(" "), {
-            timeout: 60000,
-            env: {
-              ...process.env,
-              PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
-              PATH: "/opt/venv/bin:" + process.env.PATH,
-            },
-          });
-
-          if (stdout) {
-            console.log("📤 yt-dlp captions stdout:", stdout);
+            await this.runYtDlp(captionArgs, 60000);
           }
 
           // Check if caption file was created
@@ -312,10 +312,7 @@ class VideoService {
 
           if (captionsDownloaded) break;
         } catch (langError) {
-          console.log(
-            `⚠️ Failed to download captions in ${lang}:`,
-            langError.message
-          );
+          console.log(`⚠️ Failed to download captions in ${lang}:`, langError.message);
           continue;
         }
       }
