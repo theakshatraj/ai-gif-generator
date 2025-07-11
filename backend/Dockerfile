@@ -4,11 +4,14 @@ FROM node:18-slim
 # Set working directory
 WORKDIR /app
 
-# Install essential packages and FFmpeg
+# Install essential packages, FFmpeg, Python, and yt-dlp
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     ca-certificates \
+    python3 \
+    python3-pip \
+    && pip3 install yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only package files first for caching
