@@ -215,7 +215,7 @@ process.on("SIGINT", async () => {
 
   process.exit(0)
 })
-
+  
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(`📁 Upload directory: ${path.join(__dirname, "../uploads")}`)
