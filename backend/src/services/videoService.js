@@ -32,7 +32,7 @@ class VideoService {
     })
   }
 
-  // NEW: Method to download YouTube video
+  // Method to download YouTube video
   async downloadYouTubeVideo(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     if (!videoId) {
@@ -80,55 +80,38 @@ class VideoService {
     }
   }
 
-  // Modified: Main method to get YouTube data (now includes download attempt)
+  // Modified: Main method to get YouTube data (now requires successful download)
   async getYouTubeData(youtubeUrl) {
     console.log("🔍 Getting YouTube data...")
     let videoPath = null
-    let isPlaceholder = false
     let videoInfo = null
     let transcript = null
 
+    // Attempt to download the video first
+    videoPath = await this.downloadYouTubeVideo(youtubeUrl)
+    console.log("✅ Actual YouTube video downloaded.")
+
+    // Get video info from the downloaded video
+    videoInfo = await this.getVideoInfo(videoPath)
+    console.log("✅ Video info obtained from downloaded file.")
+
+    // Get captions (always attempt, even if video download failed)
     try {
-      // First, get metadata using yt-dlp or YouTube API
-      videoInfo = await youtubeService.getVideoMetadata(youtubeUrl) // This uses yt-dlp --dump-json or YouTube API
-      console.log("✅ Initial video metadata obtained.")
-
-      // Attempt to download the video
-      try {
-        videoPath = await this.downloadYouTubeVideo(youtubeUrl)
-        console.log("✅ Actual YouTube video downloaded.")
-        // Update videoInfo with actual downloaded video's info if needed (e.g., precise duration, size)
-        const actualVideoInfo = await this.getVideoInfo(videoPath)
-        videoInfo = { ...videoInfo, ...actualVideoInfo } // Merge info
-      } catch (downloadError) {
-        console.warn(`⚠️ Failed to download actual YouTube video: ${downloadError.message}. Creating placeholder.`)
-        isPlaceholder = true
-        // Create a placeholder video if download fails
-        const placeholderResult = await this.createPlaceholderVideo(videoInfo.duration, videoInfo.title)
-        videoPath = placeholderResult.videoPath
+      transcript = await youtubeService.getVideoTranscript(youtubeUrl)
+      console.log("✅ YouTube captions extracted successfully.")
+    } catch (captionError) {
+      console.warn(`⚠️ Failed to get captions: ${captionError.message}. Using basic transcript.`)
+      transcript = {
+        text: `Video: ${videoInfo.title}. ${videoInfo.description ? videoInfo.description.substring(0, 500) : ""}`,
+        segments: [],
       }
+    }
 
-      // Get captions (always attempt, even if video download failed)
-      try {
-        transcript = await youtubeService.getVideoTranscript(youtubeUrl)
-        console.log("✅ YouTube captions extracted successfully.")
-      } catch (captionError) {
-        console.warn(`⚠️ Failed to get captions: ${captionError.message}. Using basic transcript.`)
-        transcript = {
-          text: `Video: ${videoInfo.title}. ${videoInfo.description ? videoInfo.description.substring(0, 500) : ""}`,
-          segments: [],
-        }
-      }
-
-      return {
-        videoPath,
-        videoInfo,
-        transcript,
-        isPlaceholder,
-      }
-    } catch (error) {
-      console.error("❌ Failed to process YouTube URL:", error)
-      throw new Error(`Failed to process YouTube video: ${error.message}`)
+    return {
+      videoPath,
+      videoInfo,
+      transcript,
+      isPlaceholder: false, // Always false now, as we require actual video
     }
   }
 
@@ -259,7 +242,7 @@ class VideoService {
     })
   }
 
-  // Create a blank placeholder video of a given duration
+  // Create a blank placeholder video of a given duration (kept for other potential uses, but not for YouTube fallback)
   async createPlaceholderVideo(durationInSeconds, title = "placeholder") {
     const placeholderId = uuidv4()
     const outputPath = path.join(this.tempDir, `${placeholderId}.mp4`)

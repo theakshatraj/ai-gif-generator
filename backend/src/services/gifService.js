@@ -89,6 +89,7 @@ class GifService {
     }
   }
 
+  // This function is no longer called for YouTube fallbacks, but kept for potential other uses
   async createTextGif(moment, videoInfo) {
     const gifId = uuidv4()
     const outputPath = path.join(this.outputDir, `${gifId}.gif`)

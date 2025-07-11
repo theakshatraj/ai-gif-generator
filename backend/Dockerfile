@@ -11,11 +11,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     python3 \
     python3-pip \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp with break-system-packages flag
+# Install yt-dlp from master branch with break-system-packages flag
 RUN pip3 install --break-system-packages --upgrade pip && \
-    pip3 install --break-system-packages --upgrade --pre "yt-dlp[default]"
+    pip3 install --break-system-packages --upgrade git+https://github.com/yt-dlp/yt-dlp.git@master
 
 # Copy only package files first for caching
 COPY package*.json ./

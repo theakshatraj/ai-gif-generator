@@ -58,7 +58,6 @@ export const generateGifs = async (req, res) => {
     let videoPath
     let videoInfo
     let transcript
-    let isYouTubePlaceholder = false // Flag to track if YouTube video is a placeholder
 
     if (youtubeUrl) {
       console.log("📥 Processing YouTube URL...")
@@ -68,7 +67,6 @@ export const generateGifs = async (req, res) => {
         videoPath = youtubeData.videoPath
         videoInfo = youtubeData.videoInfo
         transcript = youtubeData.transcript
-        isYouTubePlaceholder = youtubeData.isPlaceholder // Get the placeholder flag
 
         tempFiles.push(videoPath) // Add the videoPath (real or placeholder) to tempFiles for cleanup
 
@@ -76,9 +74,6 @@ export const generateGifs = async (req, res) => {
         console.log(`📹 Video duration: ${videoInfo.duration}s`)
         console.log(`🎬 Video title: ${videoInfo.title}`)
         console.log(`📝 Transcript preview: ${transcript.text.substring(0, 200)}...`)
-        if (isYouTubePlaceholder) {
-          console.log("⚠️ Actual YouTube video could not be downloaded. Using a placeholder video for GIF generation.")
-        }
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError)
         await cleanupTempFiles(tempFiles)
@@ -149,17 +144,10 @@ export const generateGifs = async (req, res) => {
       try {
         console.log(`🎨 Creating GIF ${i + 1}...`)
 
-        // Use createTextGif ONLY if it's a YouTube URL AND we have a placeholder video
-        if (youtubeUrl && isYouTubePlaceholder) {
-          const gif = await gifService.createTextGif(moment, videoInfo) // Pass videoInfo for dimensions
-          gifs.push(gif)
-          console.log(`✅ Text GIF ${i + 1} created successfully`)
-        } else {
-          // Otherwise, use createGif (for uploaded files or successfully downloaded YouTube videos)
-          const gif = await gifService.createGif(videoPath, moment, videoInfo) // Pass videoInfo for dimensions
-          gifs.push(gif)
-          console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
-        }
+        // Always use createGif now, as videoPath is guaranteed to be an actual video file
+        const gif = await gifService.createGif(videoPath, moment, videoInfo) // Pass videoInfo for dimensions
+        gifs.push(gif)
+        console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
       } catch (gifError) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, gifError)
         errors.push(`GIF ${i + 1}: ${gifError.message}`)
