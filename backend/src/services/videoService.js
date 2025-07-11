@@ -199,7 +199,7 @@ class VideoService {
         lastResortArgs.push(youtubeUrl);
 
         console.log("🆘 Last resort attempt...");
-        await new Promise((resolve) => setTimeout(resolve, 10000);
+        await new Promise((resolve) => setTimeout(resolve, 10000));
 
         try {
           await execAsync(lastResortArgs.join(" "), {
