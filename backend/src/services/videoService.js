@@ -324,82 +324,167 @@ class VideoService {
       throw new Error(`Failed to download captions: ${error.message}`);
     }
   }
+
+  // Updated getYouTubeData method with hybrid approach
   async getYouTubeData(youtubeUrl) {
-  try {
-    console.log("🔍 Extracting YouTube data without downloading video...");
-    
-    // First, try to get captions/transcript
-    let transcript;
     try {
-      transcript = await this.downloadYoutubeCaptions(youtubeUrl);
-      console.log("✅ YouTube captions extracted successfully");
-    } catch (captionError) {
-      console.log("⚠️ Failed to get captions:", captionError.message);
+      console.log("🔍 Extracting YouTube data using hybrid approach...");
       
-      // If captions fail, create a basic transcript structure
-      transcript = {
-        text: "No captions available for this video",
-        segments: []
+      // Extract video ID from URL
+      const videoId = this.extractVideoId(youtubeUrl);
+      if (!videoId) {
+        throw new Error("Invalid YouTube URL");
+      }
+
+      // Try YouTube API first (if available)
+      let videoDetails = null;
+      try {
+        videoDetails = await this.getVideoDetails(videoId);
+        console.log("✅ YouTube API metadata extracted successfully");
+      } catch (apiError) {
+        console.log("⚠️ YouTube API not available, falling back to yt-dlp:", apiError.message);
+      }
+
+      // Get captions using existing method
+      let transcript;
+      try {
+        transcript = await this.downloadYoutubeCaptions(youtubeUrl);
+        console.log("✅ YouTube captions extracted successfully");
+      } catch (captionError) {
+        console.log("⚠️ Failed to get captions:", captionError.message);
+        
+        // If YouTube API succeeded, use its data for basic transcript
+        if (videoDetails) {
+          transcript = {
+            text: `Video: ${videoDetails.title}. ${videoDetails.description.substring(0, 500)}`,
+            segments: []
+          };
+        } else {
+          transcript = {
+            text: "No captions available for this video",
+            segments: []
+          };
+        }
+      }
+
+      // Get video info - use API data if available, otherwise fallback to yt-dlp
+      let videoInfo;
+      if (videoDetails) {
+        videoInfo = videoDetails;
+      } else {
+        // Fallback to yt-dlp metadata extraction
+        try {
+          console.log("📊 Getting YouTube video metadata using yt-dlp...");
+          
+          const command = [
+            "yt-dlp",
+            "--cache-dir", this.cacheDir,
+            "--no-check-certificate",
+            "--geo-bypass",
+            "--print", "title,duration,view_count,description",
+            "--no-download",
+            "--user-agent", '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+            youtubeUrl
+          ];
+
+          const { stdout } = await execAsync(command.join(" "), {
+            timeout: 30000,
+            env: {
+              ...process.env,
+              PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
+              PATH: "/opt/venv/bin:" + process.env.PATH,
+            },
+          });
+
+          const lines = stdout.trim().split('\n');
+          videoInfo = {
+            title: lines[0] || "Unknown Title",
+            duration: parseInt(lines[1]) || 60,
+            views: lines[2] || "Unknown",
+            description: lines[3] || "No description available"
+          };
+
+          console.log("✅ YouTube metadata extracted via yt-dlp:", videoInfo);
+          
+        } catch (metadataError) {
+          console.log("⚠️ Failed to get video metadata:", metadataError.message);
+          
+          // Final fallback
+          videoInfo = {
+            title: "YouTube Video",
+            duration: 60,
+            views: "Unknown",
+            description: "Unable to fetch video details"
+          };
+        }
+      }
+
+      return {
+        transcript,
+        videoInfo,
+        isPlaceholder: false // No placeholder needed since we're not downloading video
       };
+      
+    } catch (error) {
+      console.error("❌ Failed to get YouTube data:", error);
+      throw new Error(`Failed to extract YouTube data: ${error.message}`);
     }
-
-    // Get basic video info using yt-dlp without downloading
-    let videoInfo;
-    try {
-      console.log("📊 Getting YouTube video metadata...");
-      
-      const command = [
-        "yt-dlp",
-        "--cache-dir", this.cacheDir,
-        "--no-check-certificate",
-        "--geo-bypass",
-        "--print", "title,duration,view_count,description",
-        "--no-download",
-        "--user-agent", '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-        youtubeUrl
-      ];
-
-      const { stdout } = await execAsync(command.join(" "), {
-        timeout: 30000,
-        env: {
-          ...process.env,
-          PYTHONPATH: "/opt/venv/lib/python3.11/site-packages",
-          PATH: "/opt/venv/bin:" + process.env.PATH,
-        },
-      });
-
-      const lines = stdout.trim().split('\n');
-      videoInfo = {
-        title: lines[0] || "Unknown Title",
-        duration: parseInt(lines[1]) || 60, // Default to 60 seconds if parsing fails
-        views: lines[2] || "Unknown",
-        description: lines[3] || "No description available"
-      };
-
-      console.log("✅ YouTube metadata extracted:", videoInfo);
-      
-    } catch (metadataError) {
-      console.log("⚠️ Failed to get video metadata:", metadataError.message);
-      
-      // Fallback video info
-      videoInfo = {
-        title: "YouTube Video",
-        duration: 60, // Default duration
-        views: "Unknown",
-        description: "Unable to fetch video details"
-      };
-    }
-
-    return {
-      transcript,
-      videoInfo
-    };
-    
-  } catch (error) {
-    console.error("❌ Failed to get YouTube data:", error);
-    throw new Error(`Failed to extract YouTube data: ${error.message}`);
   }
-}
+
+  // Helper method to extract video ID from YouTube URL
+  extractVideoId(url) {
+    const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+  }
+
+  // YouTube API method (only works if API key is configured)
+  async getVideoDetails(videoId) {
+    const API_KEY = process.env.YOUTUBE_API_KEY;
+    if (!API_KEY) {
+      throw new Error("YouTube API key not configured");
+    }
+
+    const url = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&key=${API_KEY}&part=snippet,contentDetails,statistics`;
+    
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (!data.items || data.items.length === 0) {
+        throw new Error("Video not found or is private");
+      }
+
+      const video = data.items[0];
+      const duration = this.parseDuration(video.contentDetails.duration);
+      
+      return {
+        title: video.snippet.title,
+        description: video.snippet.description,
+        duration: duration,
+        views: video.statistics.viewCount,
+        publishedAt: video.snippet.publishedAt,
+        channelTitle: video.snippet.channelTitle
+      };
+    } catch (error) {
+      throw new Error(`Failed to fetch video details: ${error.message}`);
+    }
+  }
+
+  // Helper method to parse ISO 8601 duration
+  parseDuration(isoDuration) {
+    // Parse ISO 8601 duration (PT4M13S) to seconds
+    const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
+    const matches = isoDuration.match(regex);
+    
+    if (!matches) return 0;
+    
+    const hours = parseInt(matches[1] || 0);
+    const minutes = parseInt(matches[2] || 0);
+    const seconds = parseInt(matches[3] || 0);
+    
+    return hours * 3600 + minutes * 60 + seconds;
+  }
 
   async parseVTTFile(vttPath) {
     try {
@@ -643,6 +728,7 @@ class VideoService {
       });
     });
   }
+
   // Create a blank placeholder video of a given duration
   async createPlaceholderVideo(durationInSeconds, title = "placeholder") {
     const placeholderId = uuidv4();
