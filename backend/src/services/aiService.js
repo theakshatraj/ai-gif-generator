@@ -124,7 +124,7 @@ Rules:
 - Return ONLY the JSON array, no other text`
 
       const userPrompt = `Video Duration: ${videoDuration} seconds
-User Prompt: "${prompt}"
+User Prompt (includes possible video metadata): "${prompt}"
 
 Video Content Analysis:
 ${transcript.text}
