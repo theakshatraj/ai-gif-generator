@@ -28,6 +28,7 @@ export const generateGifs = async (req, res) => {
     console.log("🚀 Starting GIF generation process...")
     const { prompt, youtubeUrl } = req.body
     const uploadedFile = req.file
+
     console.log("📝 Prompt:", prompt)
     console.log("🎥 YouTube URL:", youtubeUrl)
     console.log("📁 Uploaded file:", uploadedFile?.filename)
@@ -58,6 +59,7 @@ export const generateGifs = async (req, res) => {
     let videoPath
     let videoInfo
     let transcript
+    let isVideoDownloadSuccessful = false // New flag to track video download success
 
     if (youtubeUrl) {
       console.log("📥 Processing YouTube URL...")
@@ -67,19 +69,27 @@ export const generateGifs = async (req, res) => {
         videoPath = youtubeData.videoPath
         videoInfo = youtubeData.videoInfo
         transcript = youtubeData.transcript
+        isVideoDownloadSuccessful = youtubeData.isDownloadSuccessful // Get the flag
 
-        tempFiles.push(videoPath) // Add the videoPath (real or placeholder) to tempFiles for cleanup
+        if (videoPath) {
+          tempFiles.push(videoPath) // Add the downloaded video path to tempFiles for cleanup
+        }
 
         console.log("✅ YouTube data processed successfully")
         console.log(`📹 Video duration: ${videoInfo.duration}s`)
         console.log(`🎬 Video title: ${videoInfo.title}`)
         console.log(`📝 Transcript preview: ${transcript.text.substring(0, 200)}...`)
+        if (!isVideoDownloadSuccessful) {
+          console.warn("⚠️ YouTube video could not be downloaded. Will attempt to generate text-only GIFs.")
+        }
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError)
         await cleanupTempFiles(tempFiles)
-        return res.status(400).json({
+        // This catch block should only be hit if metadata/transcript fetching fails,
+        // not if video download fails (as that's handled internally in videoService)
+        return res.status(500).json({
           success: false,
-          error: `Failed to process YouTube video: ${youtubeError.message}. This might be due to video restrictions, private videos, or rate limiting. Please try again later or use a different video.`,
+          error: `Failed to process YouTube data (metadata/transcript): ${youtubeError.message}.`,
         })
       }
     } else if (uploadedFile) {
@@ -87,12 +97,10 @@ export const generateGifs = async (req, res) => {
       try {
         videoPath = uploadedFile.path
         videoInfo = await videoService.getVideoInfo(videoPath)
-
         // Extract transcript from uploaded video using video analysis
         console.log("🔍 Analyzing uploaded video content...")
         transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
-
-        console.log("✅ Uploaded video processed successfully")
+        isVideoDownloadSuccessful = true // Always true for uploaded files
       } catch (uploadError) {
         console.error("❌ Uploaded file processing failed:", uploadError)
         return res.status(400).json({
@@ -109,6 +117,8 @@ export const generateGifs = async (req, res) => {
 
     console.log("📊 Video info:", videoInfo)
     console.log("📝 Transcript preview:", transcript.text.substring(0, 300) + "...")
+    console.log(`DEBUG: videoPath = ${videoPath}`)
+    console.log(`DEBUG: isVideoDownloadSuccessful = ${isVideoDownloadSuccessful}`)
 
     // Analyze transcript with AI
     console.log("🤖 Analyzing transcript with AI...")
@@ -123,8 +133,8 @@ export const generateGifs = async (req, res) => {
         error: `AI analysis failed: ${aiAnalysisError.message}. Please try again or use a different prompt.`,
       })
     }
-    console.log("🎬 Moments to process:", JSON.stringify(moments, null, 2))
 
+    console.log("🎬 Moments to process:", JSON.stringify(moments, null, 2))
     if (!moments || moments.length === 0) {
       await cleanupTempFiles(tempFiles)
       return res.status(400).json({
@@ -136,18 +146,26 @@ export const generateGifs = async (req, res) => {
     // Generate GIFs with better error handling
     const gifs = []
     const errors = []
+    let generatedTextGifs = false // Flag to track if text GIFs were generated
+
     for (let i = 0; i < moments.length; i++) {
       const moment = moments[i]
       console.log(`🎬 Processing GIF ${i + 1}/${moments.length}`)
       console.log(`⏱️ Time: ${moment.startTime}s - ${moment.endTime}s`)
       console.log(`💬 Caption: ${moment.caption}`)
       try {
-        console.log(`🎨 Creating GIF ${i + 1}...`)
-
-        // Always use createGif now, as videoPath is guaranteed to be an actual video file
-        const gif = await gifService.createGif(videoPath, moment, videoInfo) // Pass videoInfo for dimensions
-        gifs.push(gif)
-        console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
+        if (isVideoDownloadSuccessful) {
+          console.log(`🎨 Creating GIF ${i + 1} from video...`)
+          const gif = await gifService.createGif(videoPath, moment, videoInfo)
+          gifs.push(gif)
+          console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
+        } else {
+          console.log(`🎨 Creating text GIF ${i + 1} (video not available)...`)
+          const gif = await gifService.createTextGif(moment, videoInfo) // Use createTextGif
+          gifs.push(gif)
+          generatedTextGifs = true
+          console.log(`✅ Text GIF ${i + 1} created successfully (${gif.size})`)
+        }
       } catch (gifError) {
         console.error(`❌ Failed to create GIF ${i + 1}:`, gifError)
         errors.push(`GIF ${i + 1}: ${gifError.message}`)
@@ -177,10 +195,15 @@ export const generateGifs = async (req, res) => {
       })
     }
 
-    console.log(`🎉 Successfully generated ${gifs.length} GIFs in ${processingTime}s!`)
+    let successMessage = `Successfully generated ${gifs.length} GIFs`
+    if (generatedTextGifs) {
+      successMessage += " (some or all were text-based due to video download issues)"
+    }
+
+    console.log(`🎉 ${successMessage} in ${processingTime}s!`)
     res.json({
       success: true,
-      message: `Successfully generated ${gifs.length} GIFs`,
+      message: successMessage,
       gifs: gifs.map((gif) => ({
         id: gif.id,
         caption: gif.caption,
@@ -194,6 +217,7 @@ export const generateGifs = async (req, res) => {
       videoInfo,
       captionSource: youtubeUrl ? "YouTube Captions + AI Analysis" : "Video Content Analysis",
       errors: errors.length > 0 ? errors : undefined,
+      videoContentUsed: isVideoDownloadSuccessful, // Indicate if actual video content was used
     })
   } catch (error) {
     console.error("❌ GIF generation failed:", error)
@@ -225,8 +249,10 @@ export const getGif = async (req, res) => {
         error: "GIF ID is required",
       })
     }
+
     const gifPath = path.join(process.cwd(), "output", `${id}.gif`)
     console.log(`📁 Looking for GIF: ${gifPath}`)
+
     if (!fs.existsSync(gifPath)) {
       console.log(`❌ GIF not found: ${gifPath}`)
       return res.status(404).json({
@@ -234,14 +260,18 @@ export const getGif = async (req, res) => {
         error: "GIF not found",
       })
     }
+
     const stats = fs.statSync(gifPath)
     console.log(`✅ Serving GIF: ${gifPath} (${Math.round(stats.size / 1024)}KB)`)
+
     res.setHeader("Content-Type", "image/gif")
     res.setHeader("Cache-Control", "public, max-age=31536000")
     res.setHeader("Content-Length", stats.size)
+
     // Use stream for better memory management
     const stream = fs.createReadStream(gifPath)
     stream.pipe(res)
+
     stream.on("error", (error) => {
       console.error("❌ Error streaming GIF:", error)
       if (!res.headersSent) {
