@@ -1,333 +1,436 @@
-import { exec } from "child_process"
-import path from "path"
-import fs from "fs"
-import { v4 as uuidv4 } from "uuid"
-import { promisify } from "util"
+import axios from 'axios'
+import cheerio from 'cheerio'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import fs from 'fs'
+import path from 'path'
+import { RateLimiterMemory } from 'rate-limiter-flexible'
+import puppeteer from 'puppeteer'
 
 const execAsync = promisify(exec)
 
 class YouTubeService {
   constructor() {
-    this.tempDir = path.join(process.cwd(), "temp")
-    this.cacheDir = path.join(process.cwd(), "cache")
-    this.ensureDirectories()
-  }
-
-  ensureDirectories() {
-    ;[this.tempDir, this.cacheDir].forEach((dir) => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true })
-        console.log(`📁 Created directory: ${dir}`)
-      }
+    this.rateLimiter = new RateLimiterMemory({
+      keyPrefix: 'youtube_api',
+      points: 10, // Number of requests
+      duration: 60, // Per 60 seconds
     })
+    
+    // Initialize browser for scraping
+    this.browser = null
+    this.page = null
   }
 
-  // Extract video ID from YouTube URL
-  extractVideoId(url) {
-    const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/
-    const match = url.match(regex)
-    return match ? match[1] : null
-  }
-
-  // Get video transcript using yt-dlp (captions only, no video download)
-  async getVideoTranscript(youtubeUrl) {
-    const captionId = uuidv4()
-    const captionPath = path.join(this.tempDir, `${captionId}.vtt`)
-    try {
-      console.log("📝 Downloading YouTube captions...")
-      console.log("🔗 URL:", youtubeUrl)
-      // Try to download captions in different languages
-      const languages = ["en", "en-US", "en-GB", "auto"]
-      let captionsDownloaded = false
-      for (const lang of languages) {
-        try {
-          const command = [
-            "yt-dlp",
-            "--cache-dir",
-            this.cacheDir,
-            "--write-subs",
-            "--sub-langs",
-            lang,
-            "--sub-format",
-            "vtt",
-            "--skip-download", // This is key - don't download video
-            "--user-agent",
-            '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-            "--no-check-certificate",
-            "--geo-bypass",
-            "--output",
-            captionPath.replace(".vtt", ""),
-            youtubeUrl,
-          ]
-          console.log(`🔧 Trying captions in language: ${lang}`)
-          const { stdout, stderr } = await execAsync(command.join(" "), {
-            timeout: 60000,
-          })
-          if (stdout) {
-            console.log("📤 yt-dlp captions stdout:", stdout)
-          }
-          // Check if caption file was created
-          const possibleCaptionFiles = [
-            `${captionPath.replace(".vtt", "")}.${lang}.vtt`,
-            `${captionPath.replace(".vtt", "")}.en.vtt`,
-            `${captionPath.replace(".vtt", "")}.vtt`,
-          ]
-          for (const possibleFile of possibleCaptionFiles) {
-            if (fs.existsSync(possibleFile)) {
-              if (possibleFile !== captionPath) {
-                fs.renameSync(possibleFile, captionPath)
-              }
-              captionsDownloaded = true
-              console.log(`✅ Captions downloaded successfully in ${lang}`)
-              break
-            }
-          }
-          if (captionsDownloaded) break
-        } catch (langError) {
-          console.log(`⚠️ Failed to download captions in ${lang}:`, langError.message)
-          // If it's a 403, log it but continue trying other languages or fall back
-          if (langError.message.includes("HTTP Error 403: Forbidden")) {
-            console.warn(`⚠️ Encountered 403 Forbidden for captions in ${lang}. This video might be restricted.`)
-          }
-          continue
-        }
-      }
-      if (!captionsDownloaded) {
-        // Instead of throwing, return an empty/default transcript
-        console.warn("⚠️ No captions could be downloaded for this video. Proceeding without transcript.")
-        return {
-          text: "",
-          segments: [],
-        }
-      }
-      // Parse the VTT file
-      const captions = await this.parseVTTFile(captionPath)
-      // Clean up caption file
-      if (fs.existsSync(captionPath)) {
-        fs.unlinkSync(captionPath)
-      }
-      return captions
-    } catch (error) {
-      console.error("❌ Caption download failed:", error)
-      if (fs.existsSync(captionPath)) {
-        fs.unlinkSync(captionPath)
-      }
-      // If the initial attempt to get captions fails for any reason, return empty transcript
-      console.warn(`⚠️ Falling back to empty transcript due to error: ${error.message}`)
-      return {
-        text: "",
-        segments: [],
-      }
-    }
-  }
-
-  // Get video metadata using yt-dlp (no video download)
-  async getVideoMetadata(youtubeUrl) {
-    try {
-      console.log("📊 Getting YouTube video metadata...")
-
-      const command = [
-        "yt-dlp",
-        "--cache-dir",
-        this.cacheDir,
-        "--no-check-certificate",
-        "--geo-bypass",
-        "--dump-json", // Get JSON metadata
-        "--no-download", // Don't download video
-        "--user-agent",
-        '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-        youtubeUrl,
-      ]
-      const { stdout } = await execAsync(command.join(" "), {
-        timeout: 30000,
+  // Initialize browser for advanced scraping
+  async initBrowser() {
+    if (!this.browser) {
+      this.browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+        ],
       })
-      const metadata = JSON.parse(stdout)
-
-      return {
-        title: metadata.title || "Unknown Title",
-        duration: metadata.duration || 60,
-        views: metadata.view_count || "Unknown",
-        description: metadata.description || "No description available",
-        channelTitle: metadata.uploader || "Unknown Channel",
-        publishedAt: metadata.upload_date || new Date().toISOString(),
-      }
-    } catch (error) {
-      console.log("⚠️ Failed to get video metadata:", error.message)
-
-      // Fallback method
-      return {
-        title: "YouTube Video",
-        duration: 60,
-        views: "Unknown",
-        description: "Unable to fetch video details",
-        channelTitle: "Unknown Channel",
-        publishedAt: new Date().toISOString(),
-      }
+      this.page = await this.browser.newPage()
+      
+      // Set user agent to avoid detection
+      await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     }
   }
 
-  // YouTube API method (only works if API key is configured)
-  async getVideoDetails(videoId) {
-    const API_KEY = process.env.YOUTUBE_API_KEY
-    if (!API_KEY) {
-      throw new Error("YouTube API key not configured")
+  // Extract video ID from various YouTube URL formats
+  extractVideoId(url) {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([^&\n?#]+)/,
+      /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+      /youtu\.be\/([^&\n?#]+)/,
+    ]
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern)
+      if (match) {
+        return match[1]
+      }
     }
-    const url = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&key=${API_KEY}&part=snippet,contentDetails,statistics`
+    
+    return null
+  }
 
+  // Method 1: Get video metadata using yt-dlp
+  async getVideoMetadataYtDlp(youtubeUrl) {
     try {
-      const response = await fetch(url)
-      const data = await response.json()
+      await this.rateLimiter.consume('metadata')
+      
+      const command = [
+        'yt-dlp',
+        '--dump-json',
+        '--no-download',
+        '--no-warnings',
+        '--socket-timeout', '30',
+        '--extractor-args', 'youtube:player_client=web',
+        youtubeUrl
+      ]
 
-      if (!data.items || data.items.length === 0) {
-        throw new Error("Video not found or is private")
-      }
-      const video = data.items[0]
-      const duration = this.parseDuration(video.contentDetails.duration)
-
-      return {
-        title: video.snippet.title,
-        description: video.snippet.description,
-        duration: duration,
-        views: video.statistics.viewCount,
-        publishedAt: video.snippet.publishedAt,
-        channelTitle: video.snippet.channelTitle,
-      }
-    } catch (error) {
-      throw new Error(`Failed to fetch video details: ${error.message}`)
-    }
-  }
-
-  // Helper method to parse ISO 8601 duration
-  parseDuration(isoDuration) {
-    const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/
-    const matches = isoDuration.match(regex)
-
-    if (!matches) return 0
-
-    const hours = Number.parseInt(matches[1] || 0)
-    const minutes = Number.parseInt(matches[2] || 0)
-    const seconds = Number.parseInt(matches[3] || 0)
-    const milliseconds = 0 // Declare milliseconds variable
-
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000
-  }
-
-  // Parse VTT caption file
-  async parseVTTFile(vttPath) {
-    try {
-      console.log("📖 Parsing VTT caption file...")
-      if (!fs.existsSync(vttPath)) {
-        throw new Error("VTT file not found")
-      }
-      const vttContent = fs.readFileSync(vttPath, "utf8")
-      const lines = vttContent.split("\n")
-      const captions = []
-      let currentCaption = null
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim()
-        if (!line || line.startsWith("WEBVTT") || line.startsWith("NOTE")) {
-          continue
-        }
-        if (line.includes("-->")) {
-          const timeMatch = line.match(/(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})/)
-          if (timeMatch) {
-            if (currentCaption && currentCaption.text) {
-              captions.push(currentCaption)
-            }
-            currentCaption = {
-              start: this.timeToSeconds(timeMatch[1]),
-              end: this.timeToSeconds(timeMatch[2]),
-              text: "",
-            }
-          }
-        } else if (currentCaption && line && !line.match(/^\d+$/)) {
-          if (currentCaption.text) {
-            currentCaption.text += " "
-          }
-          currentCaption.text += line.replace(/<[^>]*>/g, "").trim()
+      const { stdout } = await execAsync(command.join(' '), { timeout: 30000 })
+      
+      if (stdout && stdout.trim()) {
+        const metadata = JSON.parse(stdout.trim())
+        return {
+          title: metadata.title || 'Unknown Title',
+          duration: metadata.duration || 300,
+          views: metadata.view_count || 'Unknown',
+          description: metadata.description || 'No description available',
+          channelTitle: metadata.uploader || metadata.channel || 'Unknown Channel',
+          publishedAt: metadata.upload_date ? new Date(metadata.upload_date).toISOString() : new Date().toISOString(),
+          width: metadata.width || 640,
+          height: metadata.height || 360,
+          thumbnailUrl: metadata.thumbnail || null,
+          tags: metadata.tags || [],
         }
       }
-      if (currentCaption && currentCaption.text) {
-        captions.push(currentCaption)
-      }
-      console.log(`✅ Parsed ${captions.length} caption segments`)
-      return {
-        text: captions.map((cap) => cap.text).join(" "),
-        segments: captions.map((cap) => ({
-          start: cap.start,
-          end: cap.end,
-          text: cap.text,
-        })),
-      }
+      
+      throw new Error('No metadata returned from yt-dlp')
     } catch (error) {
-      console.error("❌ Failed to parse VTT file:", error)
+      console.warn(`yt-dlp metadata extraction failed: ${error.message}`)
       throw error
     }
   }
 
-  // Convert time string to seconds
-  timeToSeconds(timeString) {
-    const parts = timeString.split(":")
-    const hours = Number.parseInt(parts[0])
-    const minutes = Number.parseInt(parts[1])
-    const secondsParts = parts[2].split(".")
-    const seconds = Number.parseInt(secondsParts[0])
-    const milliseconds = Number.parseInt(secondsParts[1])
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000
+  // Method 2: Get video metadata using web scraping
+  async getVideoMetadataWebScraping(youtubeUrl) {
+    try {
+      await this.rateLimiter.consume('scraping')
+      
+      const response = await axios.get(youtubeUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        timeout: 30000,
+      })
+
+      const $ = cheerio.load(response.data)
+      
+      // Extract metadata from various sources
+      const title = $('meta[property="og:title"]').attr('content') || 
+                   $('meta[name="title"]').attr('content') || 
+                   $('title').text() || 
+                   'Unknown Title'
+      
+      const description = $('meta[property="og:description"]').attr('content') || 
+                         $('meta[name="description"]').attr('content') || 
+                         'No description available'
+      
+      const thumbnailUrl = $('meta[property="og:image"]').attr('content') || null
+      
+      // Try to extract structured data
+      let structuredData = null
+      $('script[type="application/ld+json"]').each((i, elem) => {
+        try {
+          const data = JSON.parse($(elem).html())
+          if (data['@type'] === 'VideoObject') {
+            structuredData = data
+          }
+        } catch (e) {
+          // Ignore parsing errors
+        }
+      })
+
+      const duration = structuredData?.duration ? this.parseDuration(structuredData.duration) : 300
+      const publishedAt = structuredData?.uploadDate || new Date().toISOString()
+      const channelTitle = structuredData?.author?.name || 'Unknown Channel'
+
+      return {
+        title: title.replace(' - YouTube', ''),
+        duration,
+        views: 'Unknown',
+        description,
+        channelTitle,
+        publishedAt,
+        width: 640,
+        height: 360,
+        thumbnailUrl,
+        tags: [],
+      }
+    } catch (error) {
+      console.warn(`Web scraping metadata extraction failed: ${error.message}`)
+      throw error
+    }
   }
 
-  // Main method to get YouTube data without downloading video
-  async getYouTubeData(youtubeUrl) {
+  // Method 3: Get video metadata using Puppeteer
+  async getVideoMetadataPuppeteer(youtubeUrl) {
     try {
-      console.log("🔍 Extracting YouTube data without video download...")
+      await this.initBrowser()
+      await this.rateLimiter.consume('puppeteer')
+      
+      await this.page.goto(youtubeUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+      
+      // Wait for video metadata to load
+      await this.page.waitForSelector('h1.title', { timeout: 10000 })
+      
+      const metadata = await this.page.evaluate(() => {
+        const title = document.querySelector('h1.title')?.textContent || 
+                     document.querySelector('meta[property="og:title"]')?.content || 
+                     'Unknown Title'
+        
+        const description = document.querySelector('meta[property="og:description"]')?.content || 
+                           'No description available'
+        
+        const channelTitle = document.querySelector('#channel-name a')?.textContent || 
+                            document.querySelector('#owner-name a')?.textContent || 
+                            'Unknown Channel'
+        
+        const thumbnailUrl = document.querySelector('meta[property="og:image"]')?.content || null
+        
+        // Try to get view count
+        const viewsElement = document.querySelector('#count .view-count') || 
+                           document.querySelector('.view-count')
+        const views = viewsElement ? viewsElement.textContent.trim() : 'Unknown'
+        
+        return {
+          title: title.trim(),
+          description: description.trim(),
+          channelTitle: channelTitle.trim(),
+          views: views,
+          thumbnailUrl,
+        }
+      })
+      
+      return {
+        ...metadata,
+        duration: 300, // Default duration
+        publishedAt: new Date().toISOString(),
+        width: 640,
+        height: 360,
+        tags: [],
+      }
+    } catch (error) {
+      console.warn(`Puppeteer metadata extraction failed: ${error.message}`)
+      throw error
+    }
+  }
 
+  // Main method to get video metadata with fallbacks
+  async getVideoMetadata(youtubeUrl) {
+    const methods = [
+      { name: 'yt-dlp', method: () => this.getVideoMetadataYtDlp(youtubeUrl) },
+      { name: 'web-scraping', method: () => this.getVideoMetadataWebScraping(youtubeUrl) },
+      { name: 'puppeteer', method: () => this.getVideoMetadataPuppeteer(youtubeUrl) },
+    ]
+    
+    for (const methodObj of methods) {
+      try {
+        console.log(`🔍 Trying metadata extraction method: ${methodObj.name}`)
+        const result = await methodObj.method()
+        console.log(`✅ Successfully extracted metadata with ${methodObj.name}`)
+        return result
+      } catch (error) {
+        console.warn(`⚠️ Method ${methodObj.name} failed: ${error.message}`)
+        continue
+      }
+    }
+    
+    throw new Error('All metadata extraction methods failed')
+  }
+
+  // Method 1: Get transcript using yt-dlp
+  async getVideoTranscriptYtDlp(youtubeUrl) {
+    try {
+      const command = [
+        'yt-dlp',
+        '--write-sub',
+        '--write-auto-sub',
+        '--sub-lang', 'en,en-US,en-GB',
+        '--sub-format', 'vtt',
+        '--skip-download',
+        '--no-warnings',
+        '--socket-timeout', '30',
+        youtubeUrl
+      ]
+
+      const { stdout, stderr } = await execAsync(command.join(' '), { timeout: 60000 })
+      
+      // Look for generated subtitle files
       const videoId = this.extractVideoId(youtubeUrl)
-      if (!videoId) {
-        throw new Error("Invalid YouTube URL")
+      const possibleFiles = [
+        `${videoId}.en.vtt`,
+        `${videoId}.en-US.vtt`,
+        `${videoId}.en-GB.vtt`,
+        `${videoId}.vtt`,
+      ]
+      
+      for (const filename of possibleFiles) {
+        if (fs.existsSync(filename)) {
+          const content = fs.readFileSync(filename, 'utf-8')
+          const text = this.parseVTTContent(content)
+          
+          // Clean up the file
+          fs.unlinkSync(filename)
+          
+          return {
+            text,
+            segments: this.extractSegments(content),
+          }
+        }
       }
+      
+      throw new Error('No subtitle files found')
+    } catch (error) {
+      console.warn(`yt-dlp transcript extraction failed: ${error.message}`)
+      throw error
+    }
+  }
 
-      // Try YouTube API first (if available)
-      let videoInfo = null
-      try {
-        videoInfo = await this.getVideoDetails(videoId)
-        console.log("✅ YouTube API metadata extracted successfully")
-      } catch (apiError) {
-        console.log("⚠️ YouTube API not available, falling back to yt-dlp:", apiError.message)
-
-        // Fallback to yt-dlp metadata
-        videoInfo = await this.getVideoMetadata(youtubeUrl)
-      }
-
-      // Get captions
-      let transcript
-      try {
-        transcript = await this.getVideoTranscript(youtubeUrl)
-        console.log("✅ YouTube captions extracted successfully")
-      } catch (captionError) {
-        console.log("⚠️ Failed to get captions:", captionError.message)
-
-        // Create basic transcript from metadata if captions fail
-        transcript = {
-          text: `Video: ${videoInfo.title}. ${videoInfo.description.substring(0, 500)}`,
+  // Method 2: Get transcript using direct API calls
+  async getVideoTranscriptAPI(youtubeUrl) {
+    try {
+      const videoId = this.extractVideoId(youtubeUrl)
+      if (!videoId) throw new Error('Invalid video ID')
+      
+      // This is a simplified approach - you might need to implement
+      // the actual YouTube transcript API calls here
+      const apiUrl = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}`
+      
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        timeout: 30000,
+      })
+      
+      if (response.data) {
+        const text = this.parseXMLTranscript(response.data)
+        return {
+          text,
           segments: [],
         }
       }
-
-      return {
-        transcript,
-        videoInfo,
-        isPlaceholder: true, // We're not downloading the actual video
-      }
+      
+      throw new Error('No transcript data received')
     } catch (error) {
-      console.error("❌ Failed to get YouTube data:", error)
-      throw new Error(`Failed to extract YouTube data: ${error.message}`)
+      console.warn(`API transcript extraction failed: ${error.message}`)
+      throw error
     }
+  }
+
+  // Main method to get video transcript
+  async getVideoTranscript(youtubeUrl) {
+    const methods = [
+      { name: 'yt-dlp', method: () => this.getVideoTranscriptYtDlp(youtubeUrl) },
+      { name: 'api', method: () => this.getVideoTranscriptAPI(youtubeUrl) },
+    ]
+    
+    for (const methodObj of methods) {
+      try {
+        console.log(`🔍 Trying transcript extraction method: ${methodObj.name}`)
+        const result = await methodObj.method()
+        console.log(`✅ Successfully extracted transcript with ${methodObj.name}`)
+        return result
+      } catch (error) {
+        console.warn(`⚠️ Method ${methodObj.name} failed: ${error.message}`)
+        continue
+      }
+    }
+    
+    throw new Error('All transcript extraction methods failed')
+  }
+
+  // Helper method to parse VTT content
+  parseVTTContent(vttContent) {
+    const lines = vttContent.split('\n')
+    const textLines = []
+    
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed && 
+          !trimmed.startsWith('WEBVTT') && 
+          !trimmed.includes('-->') && 
+          !trimmed.match(/^\d+$/)) {
+        textLines.push(trimmed)
+      }
+    }
+    
+    return textLines.join(' ').replace(/\s+/g, ' ').trim()
+  }
+
+  // Helper method to parse XML transcript
+  parseXMLTranscript(xmlContent) {
+    const $ = cheerio.load(xmlContent, { xmlMode: true })
+    const textParts = []
+    
+    $('text').each((i, elem) => {
+      const text = $(elem).text().trim()
+      if (text) {
+        textParts.push(text)
+      }
+    })
+    
+    return textParts.join(' ').replace(/\s+/g, ' ').trim()
+  }
+
+  // Helper method to extract segments from VTT
+  extractSegments(vttContent) {
+    const segments = []
+    const lines = vttContent.split('\n')
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (line.includes('-->')) {
+        const [start, end] = line.split('-->').map(t => t.trim())
+        const text = lines[i + 1]?.trim()
+        
+        if (text) {
+          segments.push({
+            start: this.parseVTTTime(start),
+            end: this.parseVTTTime(end),
+            text,
+          })
+        }
+      }
+    }
+    
+    return segments
+  }
+
+  // Helper method to parse VTT time format
+  parseVTTTime(timeString) {
+    const parts = timeString.split(':')
+    if (parts.length === 3) {
+      const [hours, minutes, seconds] = parts
+      return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds)
+    }
+    return 0
+  }
+
+  // Helper method to parse ISO 8601 duration
+  parseDuration(duration) {
+    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/)
+    if (!match) return 300
+    
+    const hours = parseInt(match[1]) || 0
+    const minutes = parseInt(match[2]) || 0
+    const seconds = parseInt(match[3]) || 0
+    
+    return hours * 3600 + minutes * 60 + seconds
   }
 
   // Cleanup method
   async cleanup() {
-    console.log("🧹 Cleaning up YouTube service...")
-    // No browser instances to clean up in this implementation
+    if (this.browser) {
+      await this.browser.close()
+      this.browser = null
+      this.page = null
+    }
   }
 }
 
