@@ -46,11 +46,14 @@ class VideoService {
 
       // Check if the video is downloadable and get info
       const info = await ytdl.getInfo(youtubeUrl)
+      // Prioritize formats that include both video and audio, then lowest video quality
       const format = ytdl.chooseFormat(info.formats, { quality: "lowestvideo", filter: "videoandaudio" })
 
       if (!format) {
+        console.error("❌ ytdl-core: No suitable video format found for download.")
         throw new Error("No suitable video format found for download.")
       }
+      console.log(`📥 ytdl-core: Selected format: ${format.qualityLabel || format.itag} (${format.container})`)
 
       const videoStream = ytdl(youtubeUrl, { format: format })
       const writeStream = fs.createWriteStream(outputPath)
@@ -68,19 +71,27 @@ class VideoService {
             console.log(`✅ YouTube video downloaded successfully to: ${outputPath}`)
             resolve(outputPath)
           } else {
+            console.error("❌ ytdl-core: Downloaded video file is empty or not found after stream ends.")
             reject(new Error("Downloaded video file is empty or not found."))
           }
         })
 
         videoStream.on("error", (error) => {
-          console.error(`❌ ytdl-core download failed: ${error.message}`)
+          console.error(`❌ ytdl-core download stream error: ${error.message}`)
+          // Log the full error object for more details
+          console.error("❌ ytdl-core download stream error details:", error)
           // Specific handling for 403 Forbidden or other access issues
           if (
             error.message.includes("403") ||
             error.message.includes("Forbidden") ||
-            error.message.includes("private")
+            error.message.includes("private") ||
+            error.message.includes("unavailable")
           ) {
-            reject(new Error(`Failed to download video: ${error.message}. This video might be restricted or private.`))
+            reject(
+              new Error(
+                `Failed to download video: ${error.message}. This video might be restricted or private/unavailable.`,
+              ),
+            )
           } else {
             reject(error) // Re-throw other errors
           }
@@ -90,13 +101,15 @@ class VideoService {
         const downloadTimeout = setTimeout(() => {
           videoStream.destroy() // Stop the stream
           writeStream.end() // Close the file
+          console.error("❌ ytdl-core: YouTube video download timed out.")
           reject(new Error("YouTube video download timed out."))
         }, 120000) // 2 minutes timeout
 
         videoStream.on("close", () => clearTimeout(downloadTimeout))
       })
     } catch (error) {
-      console.error(`❌ Failed to download YouTube video (ytdl-core): ${error.message}`)
+      console.error(`❌ Failed to download YouTube video (ytdl-core outer catch): ${error.message}`)
+      console.error("❌ ytdl-core outer catch error details:", error)
       throw error // Re-throw the error for graceful degradation in gifController
     }
   }
@@ -157,6 +170,9 @@ class VideoService {
       // Ensure videoPath is null if download failed
       videoPath = null
     }
+
+    console.log(`DEBUG (videoService.getYouTubeData): videoPath = ${videoPath}`)
+    console.log(`DEBUG (videoService.getYouTubeData): isDownloadSuccessful = ${isDownloadSuccessful}`)
 
     return {
       videoPath,
@@ -303,7 +319,7 @@ class VideoService {
         .inputOptions([`-t ${durationInSeconds}`])
         .outputOptions([
           "-c:v",
-          "libx264",
+          "libx64",
           "-preset",
           "fast",
           "-crf",
