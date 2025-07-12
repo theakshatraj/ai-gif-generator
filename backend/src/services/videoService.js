@@ -120,60 +120,80 @@ class VideoService {
         console.log(`📥 Falling back to yt-dlp for: ${youtubeUrl}`)
         
         const ytdlpStrategies = [
-          // Strategy 1: Standard download with cookies and headers
+          // Strategy 1: Web client with modern headers
           {
-            name: "standard",
-            options: [
+            name: "web-client",
+            command: [
+              "yt-dlp",
               "--cache-dir", this.cacheDir,
-              "--format", "best[ext=mp4][height<=720]/best[ext=mp4]/best[height<=720]/best",
+              "--format", "best[height<=720][ext=mp4]/best[ext=mp4]/best[height<=720]/best",
               "--output", outputPath,
+              "--extractor-args", "youtube:player_client=web,mweb",
+              "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "--referer", "https://www.youtube.com/",
+              "--add-header", "Accept-Language:en-US,en;q=0.9",
+              "--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "--retry-sleep", "3",
+              "--retries", "5",
+              "--fragment-retries", "5",
               "--no-check-certificate",
               "--geo-bypass",
-              "--add-header", "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              "--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "--add-header", "Accept-Language:en-US,en;q=0.9",
-              "--add-header", "Accept-Encoding:gzip, deflate",
-              "--add-header", "DNT:1",
-              "--add-header", "Connection:keep-alive",
-              "--add-header", "Upgrade-Insecure-Requests:1",
-              "--extractor-retries", "5",
-              "--fragment-retries", "5",
-              "--retry-sleep", "2",
-              "--throttled-rate", "100K",
+              "--no-warnings",
               youtubeUrl
             ]
           },
-          // Strategy 2: Lower quality, more aggressive bypass
+          // Strategy 2: Android client
           {
-            name: "aggressive",
-            options: [
+            name: "android-client",
+            command: [
+              "yt-dlp",
+              "--cache-dir", this.cacheDir,
+              "--format", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+              "--output", outputPath,
+              "--extractor-args", "youtube:player_client=android",
+              "--user-agent", "com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip",
+              "--retry-sleep", "5",
+              "--retries", "3",
+              "--fragment-retries", "3",
+              "--no-check-certificate",
+              "--geo-bypass",
+              "--no-warnings",
+              youtubeUrl
+            ]
+          },
+          // Strategy 3: iOS client
+          {
+            name: "ios-client",
+            command: [
+              "yt-dlp",
+              "--cache-dir", this.cacheDir,
+              "--format", "best[height<=480][ext=mp4]/best[ext=mp4]/best",
+              "--output", outputPath,
+              "--extractor-args", "youtube:player_client=ios",
+              "--user-agent", "com.google.ios.youtube/17.36.4 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
+              "--retry-sleep", "3",
+              "--retries", "3",
+              "--no-check-certificate",
+              "--geo-bypass",
+              "--no-warnings",
+              youtubeUrl
+            ]
+          },
+          // Strategy 4: Worst quality fallback
+          {
+            name: "worst-quality",
+            command: [
+              "yt-dlp",
               "--cache-dir", this.cacheDir,
               "--format", "worst[ext=mp4]/worst",
               "--output", outputPath,
+              "--extractor-args", "youtube:player_client=web",
+              "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "--retry-sleep", "2",
+              "--retries", "2",
               "--no-check-certificate",
               "--geo-bypass",
-              "--force-ipv4",
-              "--sleep-interval", "1",
-              "--max-sleep-interval", "3",
-              "--user-agent", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-              "--extractor-retries", "10",
-              "--fragment-retries", "10",
-              "--retry-sleep", "3",
-              youtubeUrl
-            ]
-          },
-          // Strategy 3: Mobile user agent
-          {
-            name: "mobile",
-            options: [
-              "--cache-dir", this.cacheDir,
-              "--format", "best[ext=mp4][height<=480]/best[ext=mp4]/best",
-              "--output", outputPath,
-              "--no-check-certificate",
-              "--geo-bypass",
-              "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-              "--extractor-retries", "3",
-              "--fragment-retries", "3",
+              "--no-warnings",
               youtubeUrl
             ]
           }
@@ -182,21 +202,25 @@ class VideoService {
         for (const strategy of ytdlpStrategies) {
           try {
             console.log(`🔧 Trying yt-dlp strategy: ${strategy.name}`)
-            console.log(`🔧 yt-dlp command: yt-dlp ${strategy.options.join(" ")}`)
+            console.log(`🔧 yt-dlp command: ${strategy.command.join(" ")}`)
             
-            const { stdout, stderr } = await execAsync(`yt-dlp ${strategy.options.join(" ")}`, {
+            const { stdout, stderr } = await execAsync(strategy.command.join(" "), {
               timeout: 300000 // 5 minutes
             })
 
             if (stdout) console.log(`📤 yt-dlp stdout (${strategy.name}):`, stdout.substring(0, 500))
             if (stderr) console.log(`📤 yt-dlp stderr (${strategy.name}):`, stderr.substring(0, 500))
 
+            // Check if file exists and has content
             if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
               console.log(`✅ YouTube video downloaded successfully with yt-dlp (${strategy.name}): ${outputPath}`)
               return outputPath
+            } else {
+              console.warn(`⚠️ yt-dlp strategy ${strategy.name} completed but no valid file found`)
             }
           } catch (strategyError) {
             console.warn(`⚠️ yt-dlp strategy ${strategy.name} failed: ${strategyError.message}`)
+            
             // Clean up any partial files
             if (fs.existsSync(outputPath)) {
               try {
@@ -217,6 +241,44 @@ class VideoService {
     }
   }
 
+  // Helper method to check if video is accessible
+  async checkVideoAccessibility(youtubeUrl) {
+    try {
+      console.log("🔍 Checking video accessibility...")
+      const videoId = youtubeService.extractVideoId(youtubeUrl)
+      
+      const command = [
+        "yt-dlp",
+        "--dump-json",
+        "--no-download",
+        "--extractor-args", "youtube:player_client=web",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "--no-warnings",
+        youtubeUrl
+      ]
+
+      const { stdout, stderr } = await execAsync(command.join(" "), {
+        timeout: 30000 // 30 seconds
+      })
+
+      if (stdout && stdout.trim()) {
+        try {
+          const metadata = JSON.parse(stdout.trim())
+          console.log(`✅ Video is accessible: ${metadata.title}`)
+          return true
+        } catch (parseError) {
+          console.warn("⚠️ Could not parse video metadata")
+          return false
+        }
+      }
+      
+      return false
+    } catch (error) {
+      console.warn(`⚠️ Video accessibility check failed: ${error.message}`)
+      return false
+    }
+  }
+
   // Modified: Main method to get YouTube data with graceful fallback
   async getYouTubeData(youtubeUrl) {
     console.log("🔍 Getting YouTube data...")
@@ -225,7 +287,13 @@ class VideoService {
     let transcript = null
     let isDownloadSuccessful = false
 
-    // Step 1: Always attempt to get video metadata and transcript first
+    // Step 1: Check video accessibility first
+    const isAccessible = await this.checkVideoAccessibility(youtubeUrl)
+    if (!isAccessible) {
+      console.warn("⚠️ Video may not be accessible for download")
+    }
+
+    // Step 2: Always attempt to get video metadata and transcript first
     try {
       console.log("📊 Fetching YouTube metadata...")
       videoInfo = await youtubeService.getVideoMetadata(youtubeUrl)
@@ -259,44 +327,45 @@ class VideoService {
       }
     }
 
-    // Step 2: Attempt to download the video
-    try {
-      console.log("📥 Attempting to download YouTube video...")
-      videoPath = await this.downloadYouTubeVideo(youtubeUrl)
-      console.log("✅ YouTube video downloaded successfully.")
-      isDownloadSuccessful = true
-      
-      // Update videoInfo with actual dimensions from downloaded video
+    // Step 3: Attempt to download the video (only if it seems accessible)
+    if (isAccessible) {
       try {
-        const actualVideoInfo = await this.getVideoInfo(videoPath)
-        videoInfo = { ...videoInfo, ...actualVideoInfo }
-      } catch (infoError) {
-        console.warn("⚠️ Could not get video info from downloaded file:", infoError.message)
-      }
-    } catch (downloadError) {
-      console.error(`❌ Failed to download YouTube video: ${downloadError.message}`)
-      
-      // Check if this is a 403 error specifically
-      if (downloadError.message.includes("403") || downloadError.message.includes("Forbidden")) {
-        console.warn("⚠️ Video appears to be blocked or restricted. Proceeding with text-only generation.")
+        console.log("📥 Attempting to download YouTube video...")
+        videoPath = await this.downloadYouTubeVideo(youtubeUrl)
+        console.log("✅ YouTube video downloaded successfully.")
+        isDownloadSuccessful = true
+        
+        // Update videoInfo with actual dimensions from downloaded video
+        try {
+          const actualVideoInfo = await this.getVideoInfo(videoPath)
+          videoInfo = { ...videoInfo, ...actualVideoInfo }
+        } catch (infoError) {
+          console.warn("⚠️ Could not get video info from downloaded file:", infoError.message)
+        }
+      } catch (downloadError) {
+        console.error(`❌ Failed to download YouTube video: ${downloadError.message}`)
+        
+        // Check if this is a 403 error specifically
+        if (downloadError.message.includes("403") || downloadError.message.includes("Forbidden")) {
+          console.warn("⚠️ Video appears to be blocked or restricted. Proceeding with text-only generation.")
+        } else {
+          console.warn(`⚠️ Download failed with error: ${downloadError.message}. Proceeding with text-only generation.`)
+        }
         isDownloadSuccessful = false
         videoPath = null
-      } else {
-        // For other errors, we might still want to try text-only
-        console.warn(`⚠️ Download failed with error: ${downloadError.message}. Proceeding with text-only generation.`)
-        isDownloadSuccessful = false
-        videoPath = null
       }
+    } else {
+      console.warn("⚠️ Skipping download due to accessibility issues. Proceeding with text-only generation.")
     }
 
-    // Step 3: If we don't have a transcript and couldn't download, this is problematic
+    // Step 4: If we don't have a transcript and couldn't download, this is problematic
     if (!transcript.text && !isDownloadSuccessful) {
       throw new Error("Unable to obtain video content or metadata. The video may be private, restricted, or unavailable.")
     }
 
     console.log(`DEBUG (videoService.getYouTubeData): videoPath = ${videoPath}`)
     console.log(`DEBUG (videoService.getYouTubeData): isDownloadSuccessful = ${isDownloadSuccessful}`)
-    console.log(`DEBUG (videoService.getYouTubeData): transcript length = ${transcript.text.length}`)
+    console.log(`DEBUG (videoService.getYouTubeData): transcript length = ${transcript.text ? transcript.text.length : 0}`)
 
     return {
       videoPath,

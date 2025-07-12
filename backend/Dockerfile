@@ -19,7 +19,10 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --break-system-packages --upgrade pip && \
     pip3 install --break-system-packages --upgrade --force-reinstall --pre yt-dlp
 
-# Alternative: Install directly from GitHub releases (latest nightly)
+# Create yt-dlp config directory and add configuration
+RUN mkdir -p /app/.config/yt-dlp
+
+# Alternative: Install directly from GitHub releases (latest nightly) - uncomment if pip version fails
 # RUN wget -O /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
 #     chmod +x /usr/local/bin/yt-dlp
 
@@ -33,8 +36,8 @@ RUN npm install --omit=dev && npm cache clean --force
 COPY . .
 
 # Create necessary folders with proper permissions
-RUN mkdir -p /app/uploads /app/output /app/temp /app/cache \
-    && chmod -R 755 /app/uploads /app/output /app/temp /app/cache
+RUN mkdir -p /app/uploads /app/output /app/temp /app/cache /app/.config/yt-dlp \
+    && chmod -R 755 /app/uploads /app/output /app/temp /app/cache /app/.config
 
 # Use non-root user for security
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser \
