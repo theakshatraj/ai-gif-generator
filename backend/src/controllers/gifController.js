@@ -74,11 +74,11 @@ export const generateGifs = async (req, res) => {
         if (videoPath) {
           tempFiles.push(videoPath) // Add the downloaded video path to tempFiles for cleanup
         }
-
         console.log("✅ YouTube data processed successfully")
         console.log(`📹 Video duration: ${videoInfo.duration}s`)
         console.log(`🎬 Video title: ${videoInfo.title}`)
         console.log(`📝 Transcript preview: ${transcript.text.substring(0, 200)}...`)
+
         if (!isVideoDownloadSuccessful) {
           console.warn("⚠️ YouTube video could not be downloaded. Will attempt to generate text-only GIFs.")
         }
@@ -187,6 +187,7 @@ export const generateGifs = async (req, res) => {
     }
 
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2)
+
     if (gifs.length === 0) {
       console.log(`❌ No GIFs were created successfully. Errors: ${errors.join(", ")}`)
       return res.status(500).json({
@@ -201,6 +202,7 @@ export const generateGifs = async (req, res) => {
     }
 
     console.log(`🎉 ${successMessage} in ${processingTime}s!`)
+
     res.json({
       success: true,
       message: successMessage,
@@ -222,14 +224,17 @@ export const generateGifs = async (req, res) => {
   } catch (error) {
     console.error("❌ GIF generation failed:", error)
     console.error("❌ Stack trace:", error.stack)
+
     // Clean up temporary files on error
     await cleanupTempFiles(tempFiles)
+
     // Clean up services
     try {
       await videoService.cleanup()
     } catch (cleanupError) {
       console.error("❌ Error during emergency cleanup:", cleanupError)
     }
+
     // Send error response
     res.status(500).json({
       success: false,

@@ -1,16 +1,18 @@
-# Use Node 18 with Python and FFmpeg support
-FROM node:18-slim
+# Use Node 20 with Python and FFmpeg support
+FROM node:20-slim
 
 # Set working directory
 WORKDIR /app
 
 # Install essential tools and system dependencies
+# python3-venv is added for better pip environment management
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     ca-certificates \
     python3 \
     python3-pip \
+    python3-venv \
     git \
     wget \
     build-essential \
@@ -24,15 +26,21 @@ RUN apt-get update && apt-get install -y \
 RUN wget -O /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
     chmod +x /usr/local/bin/yt-dlp
 
-# Configure yt-dlp
+# Install gallery-dl and youtube-dl via pip
+# Use a virtual environment for pip packages to avoid system-wide conflicts
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir gallery-dl youtube-dl && \
+    ln -s /opt/venv/bin/gallery-dl /usr/local/bin/gallery-dl && \
+    ln -s /opt/venv/bin/youtube-dl /usr/local/bin/youtube-dl
+
+# Configure yt-dlp (general options, specific user-agents are handled in JS)
 RUN mkdir -p /app/.config/yt-dlp && \
     echo "# yt-dlp config" > /app/.config/yt-dlp/config && \
     echo "--no-check-certificate" >> /app/.config/yt-dlp/config && \
     echo "--geo-bypass" >> /app/.config/yt-dlp/config && \
     echo "--socket-timeout 30" >> /app/.config/yt-dlp/config && \
     echo "--retries 3" >> /app/.config/yt-dlp/config && \
-    echo "--fragment-retries 3" >> /app/.config/yt-dlp/config && \
-    echo "--user-agent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'" >> /app/.config/yt-dlp/config
+    echo "--fragment-retries 3" >> /app/.config/yt-dlp/config
 
 # Puppeteer/Playwright install bypass (skip Chromium to avoid Railway timeout)
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -54,6 +62,7 @@ RUN mkdir -p /app/uploads /app/output /app/temp /app/cache /app/.config && \
 # Create non-root user for security
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
     chown -R appuser:appgroup /app
+
 USER appuser
 
 # Environment setup
