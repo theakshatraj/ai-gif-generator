@@ -27,7 +27,7 @@
     "playwright": "^1.40.0",
     "proxy-agent": "^6.3.1",
     "puppeteer": "^21.5.0",
-    "rate-limiter-flexible": "^3.0.8",
+    "rate-limiter-flexible": "^2.4.1",
     "retry": "^0.13.1",
     "socks-proxy-agent": "^8.0.2",
     "uuid": "^10.0.0",
