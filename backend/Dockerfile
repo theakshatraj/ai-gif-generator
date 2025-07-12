@@ -12,11 +12,16 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     git \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp from master branch with break-system-packages flag
+# Install yt-dlp from nightly build (most recent) with break-system-packages flag
 RUN pip3 install --break-system-packages --upgrade pip && \
-    pip3 install --break-system-packages --upgrade --force-reinstall git+https://github.com/yt-dlp/yt-dlp.git@master
+    pip3 install --break-system-packages --upgrade --force-reinstall --pre yt-dlp
+
+# Alternative: Install directly from GitHub releases (latest nightly)
+# RUN wget -O /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+#     chmod +x /usr/local/bin/yt-dlp
 
 # Copy only package files first for caching
 COPY package*.json ./

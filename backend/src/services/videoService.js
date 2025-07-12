@@ -115,74 +115,109 @@ class VideoService {
     } catch (ytdlError) {
       console.error(`❌ ytdl-core failed: ${ytdlError.message}`)
       
-      // Method 2: Fallback to yt-dlp
+      // Method 2: Try yt-dlp with enhanced options
       try {
         console.log(`📥 Falling back to yt-dlp for: ${youtubeUrl}`)
         
-        const command = [
-          "yt-dlp",
-          "--cache-dir", this.cacheDir,
-          "--format", "best[ext=mp4][height<=720]/best[ext=mp4]/best[height<=720]/best",
-          "--output", outputPath,
-          "--no-check-certificate",
-          "--geo-bypass",
-          "--user-agent", '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-          "--extractor-retries", "3",
-          "--fragment-retries", "3",
-          "--retry-sleep", "1",
-          youtubeUrl
+        const ytdlpStrategies = [
+          // Strategy 1: Standard download with cookies and headers
+          {
+            name: "standard",
+            options: [
+              "--cache-dir", this.cacheDir,
+              "--format", "best[ext=mp4][height<=720]/best[ext=mp4]/best[height<=720]/best",
+              "--output", outputPath,
+              "--no-check-certificate",
+              "--geo-bypass",
+              "--add-header", "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "--add-header", "Accept-Language:en-US,en;q=0.9",
+              "--add-header", "Accept-Encoding:gzip, deflate",
+              "--add-header", "DNT:1",
+              "--add-header", "Connection:keep-alive",
+              "--add-header", "Upgrade-Insecure-Requests:1",
+              "--extractor-retries", "5",
+              "--fragment-retries", "5",
+              "--retry-sleep", "2",
+              "--throttled-rate", "100K",
+              youtubeUrl
+            ]
+          },
+          // Strategy 2: Lower quality, more aggressive bypass
+          {
+            name: "aggressive",
+            options: [
+              "--cache-dir", this.cacheDir,
+              "--format", "worst[ext=mp4]/worst",
+              "--output", outputPath,
+              "--no-check-certificate",
+              "--geo-bypass",
+              "--force-ipv4",
+              "--sleep-interval", "1",
+              "--max-sleep-interval", "3",
+              "--user-agent", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+              "--extractor-retries", "10",
+              "--fragment-retries", "10",
+              "--retry-sleep", "3",
+              youtubeUrl
+            ]
+          },
+          // Strategy 3: Mobile user agent
+          {
+            name: "mobile",
+            options: [
+              "--cache-dir", this.cacheDir,
+              "--format", "best[ext=mp4][height<=480]/best[ext=mp4]/best",
+              "--output", outputPath,
+              "--no-check-certificate",
+              "--geo-bypass",
+              "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+              "--extractor-retries", "3",
+              "--fragment-retries", "3",
+              youtubeUrl
+            ]
+          }
         ]
 
-        console.log(`🔧 yt-dlp command: ${command.join(" ")}`)
-        
-        const { stdout, stderr } = await execAsync(command.join(" "), {
-          timeout: 300000 // 5 minutes
-        })
+        for (const strategy of ytdlpStrategies) {
+          try {
+            console.log(`🔧 Trying yt-dlp strategy: ${strategy.name}`)
+            console.log(`🔧 yt-dlp command: yt-dlp ${strategy.options.join(" ")}`)
+            
+            const { stdout, stderr } = await execAsync(`yt-dlp ${strategy.options.join(" ")}`, {
+              timeout: 300000 // 5 minutes
+            })
 
-        if (stdout) console.log("📤 yt-dlp stdout:", stdout)
-        if (stderr) console.log("📤 yt-dlp stderr:", stderr)
+            if (stdout) console.log(`📤 yt-dlp stdout (${strategy.name}):`, stdout.substring(0, 500))
+            if (stderr) console.log(`📤 yt-dlp stderr (${strategy.name}):`, stderr.substring(0, 500))
 
-        if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-          console.log(`✅ YouTube video downloaded successfully with yt-dlp: ${outputPath}`)
-          return outputPath
-        } else {
-          throw new Error("yt-dlp download failed - no output file created")
-        }
-      } catch (ytdlpError) {
-        console.error(`❌ yt-dlp also failed: ${ytdlpError.message}`)
-        
-        // Method 3: Try different yt-dlp format options
-        try {
-          console.log(`📥 Trying yt-dlp with different format options...`)
-          
-          const fallbackCommand = [
-            "yt-dlp",
-            "--cache-dir", this.cacheDir,
-            "--format", "worst[ext=mp4]/worst",
-            "--output", outputPath,
-            "--no-check-certificate",
-            "--geo-bypass",
-            "--user-agent", '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-            youtubeUrl
-          ]
-
-          await execAsync(fallbackCommand.join(" "), { timeout: 300000 })
-
-          if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-            console.log(`✅ YouTube video downloaded with fallback yt-dlp method: ${outputPath}`)
-            return outputPath
-          } else {
-            throw new Error("All download methods failed")
+            if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+              console.log(`✅ YouTube video downloaded successfully with yt-dlp (${strategy.name}): ${outputPath}`)
+              return outputPath
+            }
+          } catch (strategyError) {
+            console.warn(`⚠️ yt-dlp strategy ${strategy.name} failed: ${strategyError.message}`)
+            // Clean up any partial files
+            if (fs.existsSync(outputPath)) {
+              try {
+                fs.unlinkSync(outputPath)
+              } catch (unlinkError) {
+                console.warn(`⚠️ Could not clean up partial file: ${unlinkError.message}`)
+              }
+            }
+            continue
           }
-        } catch (finalError) {
-          console.error(`❌ All download methods failed: ${finalError.message}`)
-          throw new Error(`Failed to download YouTube video: ${finalError.message}`)
         }
+
+        throw new Error("All yt-dlp strategies failed")
+      } catch (ytdlpError) {
+        console.error(`❌ All yt-dlp strategies failed: ${ytdlpError.message}`)
+        throw new Error(`Failed to download YouTube video: ${ytdlpError.message}`)
       }
     }
   }
 
-  // Modified: Main method to get YouTube data (now handles download failure gracefully)
+  // Modified: Main method to get YouTube data with graceful fallback
   async getYouTubeData(youtubeUrl) {
     console.log("🔍 Getting YouTube data...")
     let videoPath = null
@@ -190,15 +225,18 @@ class VideoService {
     let transcript = null
     let isDownloadSuccessful = false
 
-    // Always attempt to get video metadata and transcript first
+    // Step 1: Always attempt to get video metadata and transcript first
     try {
+      console.log("📊 Fetching YouTube metadata...")
       videoInfo = await youtubeService.getVideoMetadata(youtubeUrl)
       console.log("✅ YouTube metadata obtained.")
     } catch (metaError) {
-      console.warn(`⚠️ Failed to get YouTube metadata: ${metaError.message}. Using default info.`)
+      console.warn(`⚠️ Failed to get YouTube metadata: ${metaError.message}`)
+      // Create basic video info
+      const videoId = youtubeService.extractVideoId(youtubeUrl)
       videoInfo = {
-        title: "YouTube Video",
-        duration: 60,
+        title: videoId ? `YouTube Video (${videoId})` : "YouTube Video",
+        duration: 300, // 5 minutes default
         views: "Unknown",
         description: "Unable to fetch video details",
         channelTitle: "Unknown Channel",
@@ -209,18 +247,21 @@ class VideoService {
     }
 
     try {
+      console.log("📝 Fetching YouTube transcript...")
       transcript = await youtubeService.getVideoTranscript(youtubeUrl)
       console.log("✅ YouTube captions extracted successfully.")
     } catch (captionError) {
-      console.warn(`⚠️ Failed to get captions: ${captionError.message}. Using basic transcript.`)
+      console.warn(`⚠️ Failed to get captions: ${captionError.message}`)
+      // Create basic transcript from metadata
       transcript = {
-        text: `Video: ${videoInfo.title}. ${videoInfo.description ? videoInfo.description.substring(0, 500) : ""}`,
+        text: `Video: ${videoInfo.title}. ${videoInfo.description ? videoInfo.description.substring(0, 500) : "No description available."}`,
         segments: [],
       }
     }
 
-    // Now, attempt to download the video with enhanced methods
+    // Step 2: Attempt to download the video
     try {
+      console.log("📥 Attempting to download YouTube video...")
       videoPath = await this.downloadYouTubeVideo(youtubeUrl)
       console.log("✅ YouTube video downloaded successfully.")
       isDownloadSuccessful = true
@@ -234,16 +275,28 @@ class VideoService {
       }
     } catch (downloadError) {
       console.error(`❌ Failed to download YouTube video: ${downloadError.message}`)
-      isDownloadSuccessful = false
-      videoPath = null
       
-      // This is critical - if we can't download the video, we should throw an error
-      // instead of silently continuing with text-only GIFs
-      throw new Error(`Unable to download YouTube video: ${downloadError.message}. Please try a different video or check if the video is publicly accessible.`)
+      // Check if this is a 403 error specifically
+      if (downloadError.message.includes("403") || downloadError.message.includes("Forbidden")) {
+        console.warn("⚠️ Video appears to be blocked or restricted. Proceeding with text-only generation.")
+        isDownloadSuccessful = false
+        videoPath = null
+      } else {
+        // For other errors, we might still want to try text-only
+        console.warn(`⚠️ Download failed with error: ${downloadError.message}. Proceeding with text-only generation.`)
+        isDownloadSuccessful = false
+        videoPath = null
+      }
+    }
+
+    // Step 3: If we don't have a transcript and couldn't download, this is problematic
+    if (!transcript.text && !isDownloadSuccessful) {
+      throw new Error("Unable to obtain video content or metadata. The video may be private, restricted, or unavailable.")
     }
 
     console.log(`DEBUG (videoService.getYouTubeData): videoPath = ${videoPath}`)
     console.log(`DEBUG (videoService.getYouTubeData): isDownloadSuccessful = ${isDownloadSuccessful}`)
+    console.log(`DEBUG (videoService.getYouTubeData): transcript length = ${transcript.text.length}`)
 
     return {
       videoPath,
