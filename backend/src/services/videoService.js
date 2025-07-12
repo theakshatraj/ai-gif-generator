@@ -5,6 +5,7 @@ import fs from "fs"
 import { v4 as uuidv4 } from "uuid"
 import { promisify } from "util"
 import youtubeService from "./youtubeService.js" // Import the YouTube service
+import ytdl from "ytdl-core"
 
 const execAsync = promisify(exec)
 
@@ -32,7 +33,7 @@ class VideoService {
     })
   }
 
-  // Method to download YouTube video
+  // Replace the existing downloadYouTubeVideo method
   async downloadYouTubeVideo(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     if (!videoId) {
@@ -41,61 +42,93 @@ class VideoService {
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
 
     try {
-      console.log(`📥 Attempting to download YouTube video: ${youtubeUrl}`)
-      const command = [
-        "yt-dlp",
-        "--no-cache-dir",
-        "--no-check-certificate",
-        "--format",
-        "worst", // Use 'worst' format for faster download, smaller size
-        "--output",
-        outputPath,
-        "--user-agent",
-        '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-        "--geo-bypass",
-        youtubeUrl,
-      ]
-      console.log(`🔧 Running yt-dlp command: ${command.join(" ")}`)
-      const { stdout, stderr } = await execAsync(command.join(" "), {
-        timeout: 120000, // 2 minutes timeout for download
-      })
-      if (stdout) console.log("📤 yt-dlp stdout:", stdout)
-      if (stderr) console.error("❌ yt-dlp stderr:", stderr) // Log stderr for debugging
+      console.log(`📥 Attempting to download YouTube video with ytdl-core: ${youtubeUrl}`)
 
-      if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-        console.log(`✅ YouTube video downloaded successfully to: ${outputPath}`)
-        return outputPath
-      } else {
-        throw new Error("Downloaded video file is empty or not found.")
+      // Check if the video is downloadable and get info
+      const info = await ytdl.getInfo(youtubeUrl)
+      const format = ytdl.chooseFormat(info.formats, { quality: "lowestvideo", filter: "videoandaudio" })
+
+      if (!format) {
+        throw new Error("No suitable video format found for download.")
       }
+
+      const videoStream = ytdl(youtubeUrl, { format: format })
+      const writeStream = fs.createWriteStream(outputPath)
+
+      return new Promise((resolve, reject) => {
+        videoStream.pipe(writeStream)
+
+        videoStream.on("progress", (chunkLength, downloaded, total) => {
+          const percent = downloaded / total
+          console.log(`📥 ytdl-core download progress: ${(percent * 100).toFixed(2)}%`)
+        })
+
+        videoStream.on("end", () => {
+          if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+            console.log(`✅ YouTube video downloaded successfully to: ${outputPath}`)
+            resolve(outputPath)
+          } else {
+            reject(new Error("Downloaded video file is empty or not found."))
+          }
+        })
+
+        videoStream.on("error", (error) => {
+          console.error(`❌ ytdl-core download failed: ${error.message}`)
+          // Specific handling for 403 Forbidden or other access issues
+          if (
+            error.message.includes("403") ||
+            error.message.includes("Forbidden") ||
+            error.message.includes("private")
+          ) {
+            reject(new Error(`Failed to download video: ${error.message}. This video might be restricted or private.`))
+          } else {
+            reject(error) // Re-throw other errors
+          }
+        })
+
+        // Set a timeout for the download stream
+        const downloadTimeout = setTimeout(() => {
+          videoStream.destroy() // Stop the stream
+          writeStream.end() // Close the file
+          reject(new Error("YouTube video download timed out."))
+        }, 120000) // 2 minutes timeout
+
+        videoStream.on("close", () => clearTimeout(downloadTimeout))
+      })
     } catch (error) {
-      console.error(`❌ Failed to download YouTube video: ${error.message}`)
-      // Specific handling for 403 Forbidden
-      if (error.message.includes("HTTP Error 403: Forbidden")) {
-        throw new Error(
-          `Failed to download video: HTTP Error 403 Forbidden. This video might be restricted or private.`,
-        )
-      }
-      throw error // Re-throw other errors
+      console.error(`❌ Failed to download YouTube video (ytdl-core): ${error.message}`)
+      throw error // Re-throw the error for graceful degradation in gifController
     }
   }
 
-  // Modified: Main method to get YouTube data (now requires successful download)
+  // Modified: Main method to get YouTube data (now handles download failure gracefully)
   async getYouTubeData(youtubeUrl) {
     console.log("🔍 Getting YouTube data...")
     let videoPath = null
     let videoInfo = null
     let transcript = null
+    let isDownloadSuccessful = false // New flag
 
-    // Attempt to download the video first
-    videoPath = await this.downloadYouTubeVideo(youtubeUrl)
-    console.log("✅ Actual YouTube video downloaded.")
+    // Always attempt to get video metadata and transcript first, as they don't require video download
+    try {
+      // Use youtubeService to get metadata without downloading the video
+      videoInfo = await youtubeService.getVideoMetadata(youtubeUrl)
+      console.log("✅ YouTube metadata obtained.")
+    } catch (metaError) {
+      console.warn(`⚠️ Failed to get YouTube metadata: ${metaError.message}. Using default info.`)
+      // Fallback to a basic videoInfo if metadata fetching fails
+      videoInfo = {
+        title: "YouTube Video",
+        duration: 60, // Default duration
+        views: "Unknown",
+        description: "Unable to fetch video details",
+        channelTitle: "Unknown Channel",
+        publishedAt: new Date().toISOString(),
+        width: 640, // Default dimensions
+        height: 360,
+      }
+    }
 
-    // Get video info from the downloaded video
-    videoInfo = await this.getVideoInfo(videoPath)
-    console.log("✅ Video info obtained from downloaded file.")
-
-    // Get captions (always attempt, even if video download failed)
     try {
       transcript = await youtubeService.getVideoTranscript(youtubeUrl)
       console.log("✅ YouTube captions extracted successfully.")
@@ -107,11 +140,29 @@ class VideoService {
       }
     }
 
+    // Now, attempt to download the video
+    try {
+      videoPath = await this.downloadYouTubeVideo(youtubeUrl)
+      console.log("✅ Actual YouTube video downloaded.")
+      isDownloadSuccessful = true
+      // If video was downloaded, update videoInfo with actual dimensions if available
+      const actualVideoInfo = await this.getVideoInfo(videoPath)
+      videoInfo = { ...videoInfo, ...actualVideoInfo } // Merge to get actual dimensions
+    } catch (downloadError) {
+      console.error(
+        `❌ Failed to download YouTube video: ${downloadError.message}. Proceeding with text-only GIF capability.`,
+      )
+      // Do not re-throw, just set isDownloadSuccessful to false
+      isDownloadSuccessful = false
+      // Ensure videoPath is null if download failed
+      videoPath = null
+    }
+
     return {
       videoPath,
       videoInfo,
       transcript,
-      isPlaceholder: false, // Always false now, as we require actual video
+      isDownloadSuccessful,
     }
   }
 
@@ -139,7 +190,6 @@ class VideoService {
           // Provide default width/height if not found
           const width = videoStream?.width || 640
           const height = videoStream?.height || 360
-
           const videoInfo = {
             duration: Math.round(duration),
             size: `${Math.round(size / (1024 * 1024))}MB`,
