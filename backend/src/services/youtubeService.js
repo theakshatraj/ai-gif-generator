@@ -1,12 +1,40 @@
 import axios from "axios"
 import * as cheerio from "cheerio"
-import { execFile } from "child_process" // Changed from exec to execFile
+import { execFile } from "child_process"
 import { promisify } from "util"
 import fs from "fs"
 import { RateLimiterMemory } from "rate-limiter-flexible"
 import puppeteer from "puppeteer"
+import path from "path" // Import path for cookie file management
+import { v4 as uuidv4 } from "uuid" // Import uuid for unique file names
 
-const execFileAsync = promisify(execFile) // Changed from execAsync to execFileAsync
+const execFileAsync = promisify(execFile)
+
+// Helper function to create a temporary cookie file
+async function createCookieFile(cookiesString) {
+  if (!cookiesString) return null
+  const cookieFilePath = path.join(process.cwd(), "temp", `cookies_${uuidv4()}.txt`)
+  try {
+    await fs.promises.writeFile(cookieFilePath, cookiesString)
+    console.log(`🍪 Created temporary cookie file: ${cookieFilePath}`)
+    return cookieFilePath
+  } catch (error) {
+    console.error(`❌ Failed to create cookie file: ${error.message}`)
+    return null
+  }
+}
+
+// Helper function to delete a temporary cookie file
+async function deleteCookieFile(filePath) {
+  if (filePath && fs.existsSync(filePath)) {
+    try {
+      await fs.promises.unlink(filePath)
+      console.log(`🗑️ Deleted temporary cookie file: ${filePath}`)
+    } catch (error) {
+      console.warn(`⚠️ Failed to delete cookie file ${filePath}: ${error.message}`)
+    }
+  }
+}
 
 class YouTubeService {
   constructor() {
@@ -60,10 +88,12 @@ class YouTubeService {
   }
 
   async getVideoMetadataYtDlp(youtubeUrl) {
+    let cookieFilePath = null
     try {
       await this.rateLimiter.consume("metadata")
+      cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
 
-      const commandArgs = [
+      const baseArgs = [
         "--dump-json",
         "--no-download",
         "--no-warnings",
@@ -71,9 +101,14 @@ class YouTubeService {
         "30",
         "--extractor-args",
         "youtube:player_client=web",
-        youtubeUrl,
       ]
-      const { stdout } = await execFileAsync("yt-dlp", commandArgs, { timeout: 30000 }) // Changed to execFileAsync
+
+      if (cookieFilePath) {
+        baseArgs.push("--cookies", cookieFilePath)
+      }
+
+      const commandArgs = [...baseArgs, youtubeUrl]
+      const { stdout } = await execFileAsync("yt-dlp", commandArgs, { timeout: 30000 })
 
       if (stdout && stdout.trim()) {
         const metadata = JSON.parse(stdout.trim())
@@ -95,6 +130,8 @@ class YouTubeService {
     } catch (error) {
       console.warn(`yt-dlp metadata extraction failed: ${error.message}`)
       throw error
+    } finally {
+      await deleteCookieFile(cookieFilePath)
     }
   }
 
@@ -235,8 +272,11 @@ class YouTubeService {
   }
 
   async getVideoTranscriptYtDlp(youtubeUrl) {
+    let cookieFilePath = null
     try {
-      const commandArgs = [
+      cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
+
+      const baseArgs = [
         "--write-sub",
         "--write-auto-sub",
         "--sub-lang",
@@ -247,9 +287,14 @@ class YouTubeService {
         "--no-warnings",
         "--socket-timeout",
         "30",
-        youtubeUrl,
       ]
-      const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, { timeout: 60000 }) // Changed to execFileAsync
+
+      if (cookieFilePath) {
+        baseArgs.push("--cookies", cookieFilePath)
+      }
+
+      const commandArgs = [...baseArgs, youtubeUrl]
+      const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, { timeout: 60000 })
 
       const videoId = this.extractVideoId(youtubeUrl)
       const possibleFiles = [`${videoId}.en.vtt`, `${videoId}.en-US.vtt`, `${videoId}.en-GB.vtt`, `${videoId}.vtt`]
@@ -272,6 +317,8 @@ class YouTubeService {
     } catch (error) {
       console.warn(`yt-dlp transcript extraction failed: ${error.message}`)
       throw error
+    } finally {
+      await deleteCookieFile(cookieFilePath)
     }
   }
 

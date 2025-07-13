@@ -1,4 +1,4 @@
-import { execFile } from "child_process" // Changed from exec to execFile
+import { execFile } from "child_process"
 import ffmpeg from "fluent-ffmpeg"
 import path from "path"
 import fs from "fs"
@@ -7,7 +7,33 @@ import { promisify } from "util"
 import youtubeService from "./youtubeService.js"
 import ytdl from "ytdl-core"
 
-const execFileAsync = promisify(execFile) // Changed from execAsync to execFileAsync
+const execFileAsync = promisify(execFile)
+
+// Helper function to create a temporary cookie file
+async function createCookieFile(cookiesString) {
+  if (!cookiesString) return null
+  const cookieFilePath = path.join(process.cwd(), "temp", `cookies_${uuidv4()}.txt`)
+  try {
+    await fs.promises.writeFile(cookieFilePath, cookiesString)
+    console.log(`🍪 Created temporary cookie file: ${cookieFilePath}`)
+    return cookieFilePath
+  } catch (error) {
+    console.error(`❌ Failed to create cookie file: ${error.message}`)
+    return null
+  }
+}
+
+// Helper function to delete a temporary cookie file
+async function deleteCookieFile(filePath) {
+  if (filePath && fs.existsSync(filePath)) {
+    try {
+      await fs.promises.unlink(filePath)
+      console.log(`🗑️ Deleted temporary cookie file: ${filePath}`)
+    } catch (error) {
+      console.warn(`⚠️ Failed to delete cookie file ${filePath}: ${error.message}`)
+    }
+  }
+}
 
 class VideoService {
   constructor() {
@@ -36,16 +62,17 @@ class VideoService {
   async downloadWithGalleryDl(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
+
     try {
       console.log(`📥 Attempting download with gallery-dl: ${youtubeUrl}`)
+
+      // Simplified arguments for gallery-dl
       const commandArgs = [
-        "--write-info-json",
-        "--extract-audio",
+        youtubeUrl,
         `--output`,
         outputPath,
-        `--config-file`,
-        "/dev/null",
-        youtubeUrl,
+        // Removed --extract-audio and --config-file /dev/null as they might be causing issues
+        // If audio extraction is needed, it can be done with ffmpeg later.
       ]
       const { stdout, stderr } = await execFileAsync("gallery-dl", commandArgs, {
         timeout: 300000, // 5 minutes
@@ -68,8 +95,10 @@ class VideoService {
   async downloadWithStreamlink(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
+
     try {
       console.log(`📥 Attempting download with streamlink: ${youtubeUrl}`)
+
       const commandArgs = [
         "--output",
         outputPath,
@@ -99,16 +128,17 @@ class VideoService {
   async downloadWithYoutubeDlExec(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
+
     try {
       console.log(`📥 Attempting download with youtube-dl: ${youtubeUrl}`)
+
       const commandArgs = [
         "--format",
         "best[height<=720]/best",
         "--output",
         outputPath,
         "--no-warnings",
-        "--extract-flat",
-        "--write-info-json",
+        // Removed --extract-flat and --write-info-json as they are not needed for direct download
         youtubeUrl,
       ]
       const { stdout, stderr } = await execFileAsync("youtube-dl", commandArgs, {
@@ -130,112 +160,133 @@ class VideoService {
   async downloadWithYtDlpEnhanced(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
-    const strategies = [
-      {
-        name: "web-mobile",
-        args: [
-          "--extractor-args",
-          "youtube:player_client=web,mweb",
-          "--user-agent",
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1",
-          "--format",
-          "best[height<=720][ext=mp4]/best[ext=mp4]/best",
-        ],
-      },
-      {
-        name: "android-testsuite",
-        args: [
-          "--extractor-args",
-          "youtube:player_client=android_testsuite",
-          "--format",
-          "best[height<=480][ext=mp4]/best[ext=mp4]/best",
-        ],
-      },
-      {
-        name: "tv-embed",
-        args: [
-          "--extractor-args",
-          "youtube:player_client=tv_embed",
-          "--format",
-          "best[height<=720][ext=mp4]/best[ext=mp4]/best",
-        ],
-      },
-      {
-        name: "web-embed",
-        args: [
-          "--extractor-args",
-          "youtube:player_client=web_embed",
-          "--referer",
-          "https://www.youtube.com/",
-          "--format",
-          "best[height<=720][ext=mp4]/best[ext=mp4]/best",
-        ],
-      },
-      {
-        name: "bypass-throttling",
-        args: ["--throttled-rate", "100K", "--format", "worst[ext=mp4]/worst"],
-      },
-      {
-        name: "default-web-fallback",
-        args: [
-          "--user-agent",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "--format",
-          "best[ext=mp4]/best",
-        ],
-      },
-    ]
-    for (const strategy of strategies) {
-      try {
-        console.log(`🔧 Trying enhanced yt-dlp strategy: ${strategy.name}`)
-        const commandArgs = [
-          "--no-warnings",
-          "--no-check-certificate",
-          "--geo-bypass",
-          "--socket-timeout",
-          "30",
-          "--retries",
-          "3",
-          "--fragment-retries",
-          "3",
-          "--output",
-          outputPath,
-          ...strategy.args,
-          youtubeUrl,
-        ]
-        console.log(`🔧 Command: yt-dlp ${commandArgs.join(" ")}`)
-        const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, {
-          timeout: 300000, // 5 minutes
-        })
-        const files = fs
-          .readdirSync(this.tempDir)
-          .filter(
-            (file) =>
-              file.startsWith(videoId) && (file.endsWith(".mp4") || file.endsWith(".webm") || file.endsWith(".mkv")),
-          )
-        if (files.length > 0) {
-          const downloadedFile = path.join(this.tempDir, files[0])
-          if (fs.existsSync(downloadedFile) && fs.statSync(downloadedFile).size > 0) {
-            console.log(`✅ Downloaded with yt-dlp (${strategy.name}): ${downloadedFile}`)
-            return downloadedFile
+    let cookieFilePath = null
+
+    try {
+      cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
+
+      const strategies = [
+        {
+          name: "web-mobile",
+          args: [
+            "--extractor-args",
+            "youtube:player_client=web,mweb",
+            "--user-agent",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1",
+            "--format",
+            "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+          ],
+        },
+        {
+          name: "android-testsuite",
+          args: [
+            "--extractor-args",
+            "youtube:player_client=android_testsuite",
+            "--format",
+            "best[height<=480][ext=mp4]/best[ext=mp4]/best",
+          ],
+        },
+        {
+          name: "tv-embed",
+          args: [
+            "--extractor-args",
+            "youtube:player_client=tv_embed",
+            "--format",
+            "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+          ],
+        },
+        {
+          name: "web-embed",
+          args: [
+            "--extractor-args",
+            "youtube:player_client=web_embed",
+            "--referer",
+            "https://www.youtube.com/",
+            "--format",
+            "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+          ],
+        },
+        {
+          name: "bypass-throttling",
+          args: ["--throttled-rate", "100K", "--format", "worst[ext=mp4]/worst"],
+        },
+        {
+          name: "default-web-fallback",
+          args: [
+            "--user-agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "--format",
+            "best[ext=mp4]/best",
+          ],
+        },
+      ]
+
+      for (const strategy of strategies) {
+        try {
+          console.log(`🔧 Trying enhanced yt-dlp strategy: ${strategy.name}`)
+
+          const baseArgs = [
+            "--no-warnings",
+            "--no-check-certificate",
+            "--geo-bypass",
+            "--socket-timeout",
+            "30",
+            "--retries",
+            "3",
+            "--fragment-retries",
+            "3",
+            "--output",
+            outputPath,
+          ]
+
+          if (cookieFilePath) {
+            baseArgs.push("--cookies", cookieFilePath)
           }
+
+          const commandArgs = [...baseArgs, ...strategy.args, youtubeUrl]
+          console.log(`🔧 Command: yt-dlp ${commandArgs.join(" ")}`)
+
+          const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, {
+            timeout: 300000, // 5 minutes
+          })
+          const files = fs
+            .readdirSync(this.tempDir)
+            .filter(
+              (file) =>
+                file.startsWith(videoId) && (file.endsWith(".mp4") || file.endsWith(".webm") || file.endsWith(".mkv")),
+            )
+
+          if (files.length > 0) {
+            const downloadedFile = path.join(this.tempDir, files[0])
+            if (fs.existsSync(downloadedFile) && fs.statSync(downloadedFile).size > 0) {
+              console.log(`✅ Downloaded with yt-dlp (${strategy.name}): ${downloadedFile}`)
+              return downloadedFile
+            }
+          }
+          console.warn(`⚠️ yt-dlp strategy ${strategy.name} completed but no valid file found`)
+        } catch (error) {
+          console.warn(`⚠️ yt-dlp strategy ${strategy.name} failed: ${error.message}`)
+          await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000))
+          continue
         }
-        console.warn(`⚠️ yt-dlp strategy ${strategy.name} completed but no valid file found`)
-      } catch (error) {
-        console.warn(`⚠️ yt-dlp strategy ${strategy.name} failed: ${error.message}`)
-        await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000))
-        continue
       }
+      throw new Error("All enhanced yt-dlp strategies failed")
+    } finally {
+      await deleteCookieFile(cookieFilePath)
     }
-    throw new Error("All enhanced yt-dlp strategies failed")
   }
 
   async downloadWithProxy(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
+    let cookieFilePath = null
+
     try {
+      cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
+
       console.log(`📥 Attempting download with proxy: ${youtubeUrl}`)
-      const commandArgs = [
+
+      const baseArgs = [
         "--proxy",
         "socks5://127.0.0.1:9050", // Tor proxy - you might need to set this up
         "--format",
@@ -247,8 +298,14 @@ class VideoService {
         "60",
         "--retries",
         "2",
-        youtubeUrl,
       ]
+
+      if (cookieFilePath) {
+        baseArgs.push("--cookies", cookieFilePath)
+      }
+
+      const commandArgs = [...baseArgs, youtubeUrl]
+
       const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, {
         timeout: 300000, // 5 minutes
       })
@@ -262,6 +319,8 @@ class VideoService {
     } catch (error) {
       console.error(`❌ proxy download failed: ${error.message}`)
       throw error
+    } finally {
+      await deleteCookieFile(cookieFilePath)
     }
   }
 
@@ -270,6 +329,7 @@ class VideoService {
     if (!videoId) {
       throw new Error("Invalid YouTube URL for download")
     }
+
     const downloadMethods = [
       { name: "yt-dlp-enhanced", method: () => this.downloadWithYtDlpEnhanced(youtubeUrl) },
       { name: "ytdl-core", method: () => this.downloadWithYtdlCore(youtubeUrl) },
@@ -278,10 +338,12 @@ class VideoService {
       { name: "streamlink", method: () => this.downloadWithStreamlink(youtubeUrl) },
       // { name: "proxy", method: () => this.downloadWithProxy(youtubeUrl) },
     ]
+
     for (const downloadMethod of downloadMethods) {
       try {
         console.log(`🔄 Trying download method: ${downloadMethod.name}`)
         const result = await downloadMethod.method()
+
         if (result && fs.existsSync(result) && fs.statSync(result).size > 0) {
           console.log(`✅ Successfully downloaded with ${downloadMethod.name}: ${result}`)
           return result
@@ -299,43 +361,53 @@ class VideoService {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
     console.log(`📥 Attempting to download YouTube video with ytdl-core: ${youtubeUrl}`)
+
     try {
       const info = await ytdl.getInfo(youtubeUrl)
+
       let format = null
+
       format = ytdl.chooseFormat(info.formats, {
         quality: "highest",
         filter: (format) => format.hasVideo && format.hasAudio && format.container === "mp4",
       })
+
       if (!format) {
         format = ytdl.chooseFormat(info.formats, {
           quality: "highest",
           filter: (format) => format.container === "mp4" && format.hasVideo,
         })
       }
+
       if (!format) {
         format = ytdl.chooseFormat(info.formats, {
           quality: "highest",
           filter: (format) => format.container === "webm" && format.hasVideo,
         })
       }
+
       if (!format) {
         format = ytdl.chooseFormat(info.formats, {
           quality: "highest",
           filter: "videoonly",
         })
       }
+
       if (!format) {
         throw new Error("No suitable video format found for ytdl-core download.")
       }
       console.log(`📥 ytdl-core: Selected format: ${format.qualityLabel || format.itag} (${format.container})`)
+
       return new Promise((resolve, reject) => {
         const videoStream = ytdl(youtubeUrl, { format: format })
         const writeStream = fs.createWriteStream(outputPath)
         videoStream.pipe(writeStream)
+
         videoStream.on("progress", (chunkLength, downloaded, total) => {
           const percent = downloaded / total
           console.log(`📥 ytdl-core download progress: ${(percent * 100).toFixed(2)}%`)
         })
+
         videoStream.on("end", () => {
           if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
             console.log(`✅ YouTube video downloaded successfully with ytdl-core: ${outputPath}`)
@@ -344,10 +416,12 @@ class VideoService {
             reject(new Error("Downloaded video file is empty or corrupted"))
           }
         })
+
         videoStream.on("error", (error) => {
           console.error(`❌ ytdl-core download error: ${error.message}`)
           reject(error)
         })
+
         const downloadTimeout = setTimeout(() => {
           videoStream.destroy()
           writeStream.end()
@@ -362,49 +436,62 @@ class VideoService {
   }
 
   async checkVideoAccessibility(youtubeUrl) {
-    const checks = [
-      async () => {
-        try {
-          const commandArgs = ["--dump-json", "--no-download", "--no-warnings", "--socket-timeout", "15", youtubeUrl]
-          const { stdout } = await execFileAsync("yt-dlp", commandArgs, { timeout: 30000 }) // Changed to execFileAsync
-          if (stdout && stdout.trim()) {
-            const metadata = JSON.parse(stdout.trim())
-            return { accessible: true, title: metadata.title, duration: metadata.duration }
-          }
-        } catch (error) {
-          console.warn(`⚠️ yt-dlp accessibility check failed: ${error.message}`)
-        }
-        return { accessible: false }
-      },
+    let cookieFilePath = null
+    try {
+      cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
 
-      async () => {
-        try {
-          const info = await ytdl.getBasicInfo(youtubeUrl)
-          return {
-            accessible: true,
-            title: info.videoDetails.title,
-            duration: Number.parseInt(info.videoDetails.lengthSeconds),
-          }
-        } catch (error) {
-          console.warn(`⚠️ ytdl-core accessibility check failed: ${error.message}`)
-        }
-        return { accessible: false }
-      },
+      const checks = [
+        async () => {
+          try {
+            const baseArgs = ["--dump-json", "--no-download", "--no-warnings", "--socket-timeout", "15"]
+            if (cookieFilePath) {
+              baseArgs.push("--cookies", cookieFilePath)
+            }
+            const commandArgs = [...baseArgs, youtubeUrl]
 
-      async () => {
-        return { accessible: false }
-      },
-    ]
-    for (const check of checks) {
-      console.log("🔍 Checking video accessibility...")
-      const result = await check()
-      if (result.accessible) {
-        console.log(`✅ Video is accessible: ${result.title}`)
-        return result
+            const { stdout } = await execFileAsync("yt-dlp", commandArgs, { timeout: 30000 })
+            if (stdout && stdout.trim()) {
+              const metadata = JSON.parse(stdout.trim())
+              return { accessible: true, title: metadata.title, duration: metadata.duration }
+            }
+          } catch (error) {
+            console.warn(`⚠️ yt-dlp accessibility check failed: ${error.message}`)
+          }
+          return { accessible: false }
+        },
+
+        async () => {
+          try {
+            const info = await ytdl.getBasicInfo(youtubeUrl)
+            return {
+              accessible: true,
+              title: info.videoDetails.title,
+              duration: Number.parseInt(info.videoDetails.lengthSeconds),
+            }
+          } catch (error) {
+            console.warn(`⚠️ ytdl-core accessibility check failed: ${error.message}`)
+          }
+          return { accessible: false }
+        },
+
+        async () => {
+          return { accessible: false }
+        },
+      ]
+
+      for (const check of checks) {
+        console.log("🔍 Checking video accessibility...")
+        const result = await check()
+        if (result.accessible) {
+          console.log(`✅ Video is accessible: ${result.title}`)
+          return result
+        }
       }
+      console.warn("⚠️ Video accessibility could not be verified by any method.")
+      return { accessible: false }
+    } finally {
+      await deleteCookieFile(cookieFilePath)
     }
-    console.warn("⚠️ Video accessibility could not be verified by any method.")
-    return { accessible: false }
   }
 
   async getYouTubeData(youtubeUrl) {
