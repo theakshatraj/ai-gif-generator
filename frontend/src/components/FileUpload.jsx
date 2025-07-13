@@ -1,51 +1,41 @@
 "use client"
-
 import { useState } from "react"
 
-const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
-  const [youtubeUrl, setYoutubeUrl] = useState("")
+const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected, checkingDuration }) => {
+  const [youtubeUrlInput, setYoutubeUrlInput] = useState("")
   const [dragActive, setDragActive] = useState(false)
-  const [checkingDuration, setCheckingDuration] = useState(false)
 
   const checkVideoDuration = (file) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const video = document.createElement("video")
       video.preload = "metadata"
-
       video.onloadedmetadata = () => {
         window.URL.revokeObjectURL(video.src)
         resolve(video.duration)
       }
-
       video.onerror = () => {
-        resolve(0) // If we can't get duration, assume it's short
+        reject(new Error("Failed to load video metadata for duration check."))
       }
-
       video.src = URL.createObjectURL(file)
     })
   }
 
   const handleFileSelection = async (file) => {
     if (!file) return
-
-    setCheckingDuration(true)
-
     try {
       const duration = await checkVideoDuration(file)
-      console.log(`📹 Video duration: ${duration} seconds`)
-
+      console.log(`📹 Uploaded video duration: ${duration} seconds`)
       // If video is longer than 9 seconds, show segment selector
       if (duration > 9) {
-        onLongVideoDetected(file, duration)
+        onLongVideoDetected(file, null, duration) // Pass null for youtubeUrl
       } else {
         onFileSelect(file)
       }
     } catch (error) {
       console.error("Error checking video duration:", error)
-      // If we can't check duration, proceed normally
+      // If we can't check duration, proceed normally but warn
+      alert("Could not determine video duration. Proceeding with full video. If it's too long, it might fail.")
       onFileSelect(file)
-    } finally {
-      setCheckingDuration(false)
     }
   }
 
@@ -63,7 +53,6 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileSelection(e.dataTransfer.files[0])
     }
@@ -77,14 +66,15 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
         <div className="flex gap-2">
           <input
             type="url"
-            value={youtubeUrl}
-            onChange={(e) => setYoutubeUrl(e.target.value)}
+            value={youtubeUrlInput}
+            onChange={(e) => setYoutubeUrlInput(e.target.value)}
             placeholder="https://youtube.com/watch?v=..."
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            disabled={checkingDuration}
           />
           <button
-            onClick={() => onYouTubeUrl(youtubeUrl)}
-            disabled={!youtubeUrl.trim()}
+            onClick={() => onYouTubeUrl(youtubeUrlInput)}
+            disabled={!youtubeUrlInput.trim() || checkingDuration}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             Load
