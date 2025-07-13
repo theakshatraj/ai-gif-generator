@@ -1,12 +1,12 @@
 import axios from "axios"
-import * as cheerio from "cheerio" // <--- CHANGED: Import cheerio as a namespace
-import { exec } from "child_process"
+import * as cheerio from "cheerio"
+import { execFile } from "child_process" // Changed from exec to execFile
 import { promisify } from "util"
 import fs from "fs"
 import { RateLimiterMemory } from "rate-limiter-flexible"
 import puppeteer from "puppeteer"
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile) // Changed from execAsync to execFileAsync
 
 class YouTubeService {
   constructor() {
@@ -16,12 +16,10 @@ class YouTubeService {
       duration: 60, // Per 60 seconds
     })
 
-    // Initialize browser for scraping
     this.browser = null
     this.page = null
   }
 
-  // Initialize browser for advanced scraping
   async initBrowser() {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
@@ -33,19 +31,17 @@ class YouTubeService {
           "--disable-gpu",
           "--disable-web-security",
           "--disable-features=VizDisplayCompositor",
-          "--single-process", // Added for Railway to potentially reduce memory/CPU
+          "--single-process",
         ],
       })
       this.page = await this.browser.newPage()
 
-      // Set user agent to avoid detection
       await this.page.setUserAgent(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       )
     }
   }
 
-  // Extract video ID from various YouTube URL formats
   extractVideoId(url) {
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([^&\n?#]+)/,
@@ -63,13 +59,11 @@ class YouTubeService {
     return null
   }
 
-  // Method 1: Get video metadata using yt-dlp
   async getVideoMetadataYtDlp(youtubeUrl) {
     try {
       await this.rateLimiter.consume("metadata")
 
-      const command = [
-        "yt-dlp",
+      const commandArgs = [
         "--dump-json",
         "--no-download",
         "--no-warnings",
@@ -79,7 +73,7 @@ class YouTubeService {
         "youtube:player_client=web",
         youtubeUrl,
       ]
-      const { stdout } = await execAsync(command.join(" "), { timeout: 30000 })
+      const { stdout } = await execFileAsync("yt-dlp", commandArgs, { timeout: 30000 }) // Changed to execFileAsync
 
       if (stdout && stdout.trim()) {
         const metadata = JSON.parse(stdout.trim())
@@ -104,7 +98,6 @@ class YouTubeService {
     }
   }
 
-  // Method 2: Get video metadata using web scraping
   async getVideoMetadataWebScraping(youtubeUrl) {
     try {
       await this.rateLimiter.consume("scraping")
@@ -121,9 +114,8 @@ class YouTubeService {
         },
         timeout: 30000,
       })
-      const $ = cheerio.load(response.data) // <--- Uses cheerio.load
+      const $ = cheerio.load(response.data)
 
-      // Extract metadata from various sources
       const title =
         $('meta[property="og:title"]').attr("content") ||
         $('meta[name="title"]').attr("content") ||
@@ -137,7 +129,6 @@ class YouTubeService {
 
       const thumbnailUrl = $('meta[property="og:image"]').attr("content") || null
 
-      // Try to extract structured data
       let structuredData = null
       $('script[type="application/ld+json"]').each((i, elem) => {
         try {
@@ -170,7 +161,6 @@ class YouTubeService {
     }
   }
 
-  // Method 3: Get video metadata using Puppeteer
   async getVideoMetadataPuppeteer(youtubeUrl) {
     try {
       await this.initBrowser()
@@ -178,7 +168,6 @@ class YouTubeService {
 
       await this.page.goto(youtubeUrl, { waitUntil: "networkidle2", timeout: 30000 })
 
-      // Wait for video metadata to load
       await this.page.waitForSelector("h1.title", { timeout: 10000 })
 
       const metadata = await this.page.evaluate(() => {
@@ -197,7 +186,6 @@ class YouTubeService {
 
         const thumbnailUrl = document.querySelector('meta[property="og:image"]')?.content || null
 
-        // Try to get view count
         const viewsElement = document.querySelector("#count .view-count") || document.querySelector(".view-count")
         const views = viewsElement ? viewsElement.textContent.trim() : "Unknown"
 
@@ -212,7 +200,7 @@ class YouTubeService {
 
       return {
         ...metadata,
-        duration: 300, // Default duration
+        duration: 300,
         publishedAt: new Date().toISOString(),
         width: 640,
         height: 360,
@@ -224,7 +212,6 @@ class YouTubeService {
     }
   }
 
-  // Main method to get video metadata with fallbacks
   async getVideoMetadata(youtubeUrl) {
     const methods = [
       { name: "yt-dlp", method: () => this.getVideoMetadataYtDlp(youtubeUrl) },
@@ -247,11 +234,9 @@ class YouTubeService {
     throw new Error("All metadata extraction methods failed")
   }
 
-  // Method 1: Get transcript using yt-dlp
   async getVideoTranscriptYtDlp(youtubeUrl) {
     try {
-      const command = [
-        "yt-dlp",
+      const commandArgs = [
         "--write-sub",
         "--write-auto-sub",
         "--sub-lang",
@@ -264,9 +249,8 @@ class YouTubeService {
         "30",
         youtubeUrl,
       ]
-      const { stdout, stderr } = await execAsync(command.join(" "), { timeout: 60000 })
+      const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, { timeout: 60000 }) // Changed to execFileAsync
 
-      // Look for generated subtitle files
       const videoId = this.extractVideoId(youtubeUrl)
       const possibleFiles = [`${videoId}.en.vtt`, `${videoId}.en-US.vtt`, `${videoId}.en-GB.vtt`, `${videoId}.vtt`]
 
@@ -275,7 +259,6 @@ class YouTubeService {
           const content = fs.readFileSync(filename, "utf-8")
           const text = this.parseVTTContent(content)
 
-          // Clean up the file
           fs.unlinkSync(filename)
 
           return {
@@ -292,14 +275,11 @@ class YouTubeService {
     }
   }
 
-  // Method 2: Get transcript using direct API calls
   async getVideoTranscriptAPI(youtubeUrl) {
     try {
       const videoId = this.extractVideoId(youtubeUrl)
       if (!videoId) throw new Error("Invalid video ID")
 
-      // This is a simplified approach - you might need to implement
-      // the actual YouTube transcript API calls here
       const apiUrl = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}`
 
       const response = await axios.get(apiUrl, {
@@ -325,7 +305,6 @@ class YouTubeService {
     }
   }
 
-  // Main method to get video transcript
   async getVideoTranscript(youtubeUrl) {
     const methods = [
       { name: "yt-dlp", method: () => this.getVideoTranscriptYtDlp(youtubeUrl) },
@@ -347,7 +326,6 @@ class YouTubeService {
     throw new Error("All transcript extraction methods failed")
   }
 
-  // Helper method to parse VTT content
   parseVTTContent(vttContent) {
     const lines = vttContent.split("\n")
     const textLines = []
@@ -362,9 +340,8 @@ class YouTubeService {
     return textLines.join(" ").replace(/\s+/g, " ").trim()
   }
 
-  // Helper method to parse XML transcript
   parseXMLTranscript(xmlContent) {
-    const $ = cheerio.load(xmlContent, { xmlMode: true }) // <--- Uses cheerio.load
+    const $ = cheerio.load(xmlContent, { xmlMode: true })
     const textParts = []
 
     $("text").each((i, elem) => {
@@ -377,7 +354,6 @@ class YouTubeService {
     return textParts.join(" ").replace(/\s+/g, " ").trim()
   }
 
-  // Helper method to extract segments from VTT
   extractSegments(vttContent) {
     const segments = []
     const lines = vttContent.split("\n")
@@ -401,7 +377,6 @@ class YouTubeService {
     return segments
   }
 
-  // Helper method to parse VTT time format
   parseVTTTime(timeString) {
     const parts = timeString.split(":")
     if (parts.length === 3) {
@@ -411,7 +386,6 @@ class YouTubeService {
     return 0
   }
 
-  // Helper method to parse ISO 8601 duration
   parseDuration(duration) {
     const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/)
     if (!match) return 300
@@ -423,7 +397,6 @@ class YouTubeService {
     return hours * 3600 + minutes * 60 + seconds
   }
 
-  // Cleanup method
   async cleanup() {
     if (this.browser) {
       await this.browser.close()

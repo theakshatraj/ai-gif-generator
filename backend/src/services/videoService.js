@@ -1,13 +1,13 @@
-import { exec } from "child_process"
+import { execFile } from "child_process" // Changed from exec to execFile
 import ffmpeg from "fluent-ffmpeg"
 import path from "path"
 import fs from "fs"
 import { v4 as uuidv4 } from "uuid"
 import { promisify } from "util"
-import youtubeService from "./youtubeService.js" // Assuming this exists and has extractVideoId, getVideoMetadata, getVideoTranscript
+import youtubeService from "./youtubeService.js"
 import ytdl from "ytdl-core"
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile) // Changed from execAsync to execFileAsync
 
 class VideoService {
   constructor() {
@@ -36,12 +36,9 @@ class VideoService {
   async downloadWithGalleryDl(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
-
     try {
       console.log(`📥 Attempting download with gallery-dl: ${youtubeUrl}`)
-
-      const command = [
-        "gallery-dl",
+      const commandArgs = [
         "--write-info-json",
         "--extract-audio",
         `--output`,
@@ -50,12 +47,11 @@ class VideoService {
         "/dev/null",
         youtubeUrl,
       ]
-      const { stdout, stderr } = await execAsync(command.join(" "), {
+      const { stdout, stderr } = await execFileAsync("gallery-dl", commandArgs, {
         timeout: 300000, // 5 minutes
       })
       console.log(`📤 gallery-dl output:`, stdout)
       if (stderr) console.log(`📤 gallery-dl stderr:`, stderr)
-      // Find the downloaded file
       const files = fs.readdirSync(this.tempDir).filter((file) => file.startsWith(videoId))
       if (files.length > 0) {
         const downloadedFile = path.join(this.tempDir, files[0])
@@ -72,12 +68,9 @@ class VideoService {
   async downloadWithStreamlink(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
-
     try {
       console.log(`📥 Attempting download with streamlink: ${youtubeUrl}`)
-
-      const command = [
-        "streamlink",
+      const commandArgs = [
         "--output",
         outputPath,
         "--retry-streams",
@@ -89,7 +82,7 @@ class VideoService {
         youtubeUrl,
         "best",
       ]
-      const { stdout, stderr } = await execAsync(command.join(" "), {
+      const { stdout, stderr } = await execFileAsync("streamlink", commandArgs, {
         timeout: 300000, // 5 minutes
       })
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
@@ -106,12 +99,9 @@ class VideoService {
   async downloadWithYoutubeDlExec(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
-
     try {
       console.log(`📥 Attempting download with youtube-dl: ${youtubeUrl}`)
-
-      const command = [
-        "youtube-dl",
+      const commandArgs = [
         "--format",
         "best[height<=720]/best",
         "--output",
@@ -121,10 +111,9 @@ class VideoService {
         "--write-info-json",
         youtubeUrl,
       ]
-      const { stdout, stderr } = await execAsync(command.join(" "), {
+      const { stdout, stderr } = await execFileAsync("youtube-dl", commandArgs, {
         timeout: 300000, // 5 minutes
       })
-      // Find the downloaded file
       const files = fs.readdirSync(this.tempDir).filter((file) => file.startsWith(videoId) && file.endsWith(".mp4"))
       if (files.length > 0) {
         const downloadedFile = path.join(this.tempDir, files[0])
@@ -141,7 +130,6 @@ class VideoService {
   async downloadWithYtDlpEnhanced(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
-
     const strategies = [
       {
         name: "web-mobile",
@@ -188,23 +176,19 @@ class VideoService {
         args: ["--throttled-rate", "100K", "--format", "worst[ext=mp4]/worst"],
       },
       {
-        // New generic strategy as a last resort
         name: "default-web-fallback",
         args: [
           "--user-agent",
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "--format",
-          "best[ext=mp4]/best", // Try any best MP4
+          "best[ext=mp4]/best",
         ],
       },
     ]
-
     for (const strategy of strategies) {
       try {
         console.log(`🔧 Trying enhanced yt-dlp strategy: ${strategy.name}`)
-
-        const command = [
-          "yt-dlp",
+        const commandArgs = [
           "--no-warnings",
           "--no-check-certificate",
           "--geo-bypass",
@@ -219,19 +203,16 @@ class VideoService {
           ...strategy.args,
           youtubeUrl,
         ]
-        console.log(`🔧 Command: ${command.join(" ")}`)
-
-        const { stdout, stderr } = await execAsync(command.join(" "), {
+        console.log(`🔧 Command: yt-dlp ${commandArgs.join(" ")}`)
+        const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, {
           timeout: 300000, // 5 minutes
         })
-        // Find the downloaded file
         const files = fs
           .readdirSync(this.tempDir)
           .filter(
             (file) =>
               file.startsWith(videoId) && (file.endsWith(".mp4") || file.endsWith(".webm") || file.endsWith(".mkv")),
           )
-
         if (files.length > 0) {
           const downloadedFile = path.join(this.tempDir, files[0])
           if (fs.existsSync(downloadedFile) && fs.statSync(downloadedFile).size > 0) {
@@ -242,7 +223,6 @@ class VideoService {
         console.warn(`⚠️ yt-dlp strategy ${strategy.name} completed but no valid file found`)
       } catch (error) {
         console.warn(`⚠️ yt-dlp strategy ${strategy.name} failed: ${error.message}`)
-        // Add a small delay before trying the next strategy
         await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000))
         continue
       }
@@ -253,12 +233,9 @@ class VideoService {
   async downloadWithProxy(youtubeUrl) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
-
     try {
       console.log(`📥 Attempting download with proxy: ${youtubeUrl}`)
-
-      const command = [
-        "yt-dlp",
+      const commandArgs = [
         "--proxy",
         "socks5://127.0.0.1:9050", // Tor proxy - you might need to set this up
         "--format",
@@ -272,10 +249,9 @@ class VideoService {
         "2",
         youtubeUrl,
       ]
-      const { stdout, stderr } = await execAsync(command.join(" "), {
+      const { stdout, stderr } = await execFileAsync("yt-dlp", commandArgs, {
         timeout: 300000, // 5 minutes
       })
-      // Find the downloaded file
       const files = fs.readdirSync(this.tempDir).filter((file) => file.startsWith(videoId))
       if (files.length > 0) {
         const downloadedFile = path.join(this.tempDir, files[0])
@@ -294,34 +270,24 @@ class VideoService {
     if (!videoId) {
       throw new Error("Invalid YouTube URL for download")
     }
-
     const downloadMethods = [
-      // Method 1: Enhanced yt-dlp with multiple strategies
       { name: "yt-dlp-enhanced", method: () => this.downloadWithYtDlpEnhanced(youtubeUrl) },
-      // Method 2: ytdl-core (fastest but often blocked)
       { name: "ytdl-core", method: () => this.downloadWithYtdlCore(youtubeUrl) },
-      // Method 3: youtube-dl (older but sometimes works)
       { name: "youtube-dl", method: () => this.downloadWithYoutubeDlExec(youtubeUrl) },
-      // Method 4: gallery-dl (alternative extractor)
       { name: "gallery-dl", method: () => this.downloadWithGalleryDl(youtubeUrl) },
-      // Method 5: streamlink (for live streams)
       { name: "streamlink", method: () => this.downloadWithStreamlink(youtubeUrl) },
-      // Method 6: proxy download (if available) - uncomment if you set up a proxy
       // { name: "proxy", method: () => this.downloadWithProxy(youtubeUrl) },
     ]
-
     for (const downloadMethod of downloadMethods) {
       try {
         console.log(`🔄 Trying download method: ${downloadMethod.name}`)
         const result = await downloadMethod.method()
-
         if (result && fs.existsSync(result) && fs.statSync(result).size > 0) {
           console.log(`✅ Successfully downloaded with ${downloadMethod.name}: ${result}`)
           return result
         }
       } catch (error) {
         console.warn(`⚠️ Method ${downloadMethod.name} failed: ${error.message}`)
-        // Add a small random delay before trying the next method
         await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 3000))
         continue
       }
@@ -333,58 +299,43 @@ class VideoService {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
     console.log(`📥 Attempting to download YouTube video with ytdl-core: ${youtubeUrl}`)
-
     try {
       const info = await ytdl.getInfo(youtubeUrl)
-
-      // Try different format selection strategies for robustness
       let format = null
-
-      // Strategy 1: Best quality MP4 with both video and audio
       format = ytdl.chooseFormat(info.formats, {
         quality: "highest",
         filter: (format) => format.hasVideo && format.hasAudio && format.container === "mp4",
       })
-
-      // Strategy 2: If no combined MP4, try any best quality MP4 (might be video-only, requiring audio merge later)
       if (!format) {
         format = ytdl.chooseFormat(info.formats, {
           quality: "highest",
           filter: (format) => format.container === "mp4" && format.hasVideo,
         })
       }
-
-      // Strategy 3: If still no MP4, try best quality WebM (might be video-only)
       if (!format) {
         format = ytdl.chooseFormat(info.formats, {
           quality: "highest",
           filter: (format) => format.container === "webm" && format.hasVideo,
         })
       }
-
-      // Strategy 4: As a last resort, try any video format
       if (!format) {
         format = ytdl.chooseFormat(info.formats, {
           quality: "highest",
           filter: "videoonly",
         })
       }
-
       if (!format) {
         throw new Error("No suitable video format found for ytdl-core download.")
       }
       console.log(`📥 ytdl-core: Selected format: ${format.qualityLabel || format.itag} (${format.container})`)
-
       return new Promise((resolve, reject) => {
         const videoStream = ytdl(youtubeUrl, { format: format })
         const writeStream = fs.createWriteStream(outputPath)
         videoStream.pipe(writeStream)
-
         videoStream.on("progress", (chunkLength, downloaded, total) => {
           const percent = downloaded / total
           console.log(`📥 ytdl-core download progress: ${(percent * 100).toFixed(2)}%`)
         })
-
         videoStream.on("end", () => {
           if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
             console.log(`✅ YouTube video downloaded successfully with ytdl-core: ${outputPath}`)
@@ -393,13 +344,10 @@ class VideoService {
             reject(new Error("Downloaded video file is empty or corrupted"))
           }
         })
-
         videoStream.on("error", (error) => {
           console.error(`❌ ytdl-core download error: ${error.message}`)
           reject(error)
         })
-
-        // 3 minute timeout
         const downloadTimeout = setTimeout(() => {
           videoStream.destroy()
           writeStream.end()
@@ -409,26 +357,16 @@ class VideoService {
       })
     } catch (error) {
       console.error(`❌ ytdl-core initial info fetch or stream setup failed: ${error.message}`)
-      throw error // Re-throw to be caught by the main download loop
+      throw error
     }
   }
 
   async checkVideoAccessibility(youtubeUrl) {
     const checks = [
-      // Check 1: yt-dlp info
       async () => {
         try {
-          const command = [
-            "yt-dlp",
-            "--dump-json",
-            "--no-download",
-            "--no-warnings",
-            "--socket-timeout",
-            "15",
-            youtubeUrl,
-          ]
-
-          const { stdout } = await execAsync(command.join(" "), { timeout: 30000 })
+          const commandArgs = ["--dump-json", "--no-download", "--no-warnings", "--socket-timeout", "15", youtubeUrl]
+          const { stdout } = await execFileAsync("yt-dlp", commandArgs, { timeout: 30000 }) // Changed to execFileAsync
           if (stdout && stdout.trim()) {
             const metadata = JSON.parse(stdout.trim())
             return { accessible: true, title: metadata.title, duration: metadata.duration }
@@ -439,7 +377,6 @@ class VideoService {
         return { accessible: false }
       },
 
-      // Check 2: ytdl-core info
       async () => {
         try {
           const info = await ytdl.getBasicInfo(youtubeUrl)
@@ -454,14 +391,10 @@ class VideoService {
         return { accessible: false }
       },
 
-      // Check 3: Direct API check (if available) - Placeholder
       async () => {
-        // const videoId = youtubeService.extractVideoId(youtubeUrl);
-        // You could add YouTube API v3 check here if you have an API key
         return { accessible: false }
       },
     ]
-
     for (const check of checks) {
       console.log("🔍 Checking video accessibility...")
       const result = await check()
@@ -481,21 +414,18 @@ class VideoService {
     let transcript = null
     let isDownloadSuccessful = false
 
-    // Step 1: Check video accessibility
     const accessibilityResult = await this.checkVideoAccessibility(youtubeUrl)
 
-    // Step 2: Get video metadata and transcript
     try {
       console.log("📊 Fetching YouTube metadata...")
       videoInfo = await youtubeService.getVideoMetadata(youtubeUrl)
       console.log("✅ YouTube metadata obtained.")
     } catch (metaError) {
       console.warn(`⚠️ Failed to get YouTube metadata: ${metaError.message}`)
-      // Use accessibility result if available
       const videoId = youtubeService.extractVideoId(youtubeUrl)
       videoInfo = {
         title: accessibilityResult.title || (videoId ? `YouTube Video (${videoId})` : "Unknown YouTube Video"),
-        duration: accessibilityResult.duration || 300, // Default to 5 minutes if duration unknown
+        duration: accessibilityResult.duration || 300,
         views: "Unknown",
         description: "Unable to fetch video details",
         channelTitle: "Unknown Channel",
@@ -517,7 +447,6 @@ class VideoService {
       }
     }
 
-    // Step 3: Attempt download only if we have some content or accessibility is confirmed
     if (accessibilityResult.accessible || transcript.text) {
       try {
         console.log("📥 Attempting to download YouTube video...")
@@ -525,7 +454,6 @@ class VideoService {
         console.log("✅ YouTube video downloaded successfully.")
         isDownloadSuccessful = true
 
-        // Update videoInfo with actual dimensions
         try {
           const actualVideoInfo = await this.getVideoInfo(videoPath)
           videoInfo = { ...videoInfo, ...actualVideoInfo }
@@ -541,7 +469,6 @@ class VideoService {
       console.warn("⚠️ Skipping download - no accessible content or metadata found.")
     }
 
-    // Step 4: Final validation
     if (!transcript.text && !isDownloadSuccessful) {
       throw new Error(
         "Unable to obtain video content or metadata. The video may be private, restricted, or unavailable.",
@@ -747,8 +674,6 @@ class VideoService {
 
   async cleanup() {
     console.log("🧹 Cleaning up video service...")
-    // Assuming youtubeService also has a cleanup method if needed
-    // await youtubeService.cleanup()
   }
 }
 
