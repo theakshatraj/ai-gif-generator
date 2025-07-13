@@ -78,14 +78,14 @@ function App() {
     try {
       console.log("✂️ Processing video segment:", segment);
 
-      // Create segment metadata (simpler approach)
-      const segmentFile = videoTrimmer.createSegmentMetadata(
+      // Use the enhanced trimming functionality
+      const trimmedFile = await videoTrimmer.createTrimmedSegment(
         longVideo.file,
         segment.startTime,
         segment.endTime
       );
 
-      setFile(segmentFile);
+      setFile(trimmedFile);
       setSelectedSegment(segment);
       setShowSegmentSelector(false);
       setLongVideo(null);
@@ -280,7 +280,7 @@ function App() {
               {processingSegment ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
-                    <div className="animate-spin mx-auto h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
+                    <div className="segment-processing mx-auto h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
                     <p className="text-gray-600">Processing video segment...</p>
                   </div>
                 </div>

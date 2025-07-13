@@ -97,9 +97,30 @@ export const generateGifs = async (req, res) => {
       try {
         videoPath = uploadedFile.path
         videoInfo = await videoService.getVideoInfo(videoPath)
-        // Extract transcript from uploaded video using video analysis
-        console.log("🔍 Analyzing uploaded video content...")
-        transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+        
+        // Check if this is a trimmed segment
+        const isSegmented = req.body.isSegmented === "true"
+        const segmentStart = req.body.segmentStart ? Number.parseFloat(req.body.segmentStart) : null
+        const segmentEnd = req.body.segmentEnd ? Number.parseFloat(req.body.segmentEnd) : null
+        
+        if (isSegmented && segmentStart !== null && segmentEnd !== null) {
+          console.log(`✂️ Processing trimmed segment: ${segmentStart}s - ${segmentEnd}s`)
+          // For trimmed segments, we'll analyze the entire segment content
+          // since it's already been trimmed to the desired length
+          transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+          
+          // Update video info to reflect the segment duration
+          videoInfo.originalDuration = videoInfo.duration
+          videoInfo.duration = segmentEnd - segmentStart
+          videoInfo.isSegmented = true
+          videoInfo.segmentStart = segmentStart
+          videoInfo.segmentEnd = segmentEnd
+        } else {
+          // Extract transcript from uploaded video using video analysis
+          console.log("🔍 Analyzing uploaded video content...")
+          transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+        }
+        
         isVideoDownloadSuccessful = true // Always true for uploaded files
       } catch (uploadError) {
         console.error("❌ Uploaded file processing failed:", uploadError)
@@ -124,7 +145,9 @@ export const generateGifs = async (req, res) => {
     console.log("🤖 Analyzing transcript with AI...")
     let moments
     try {
-      moments = await aiService.analyzeTranscriptWithTimestamps(transcript, prompt, Number.parseInt(videoInfo.duration))
+      // Use segment duration for segmented videos, otherwise use full duration
+      const analysisDuration = videoInfo.isSegmented ? videoInfo.duration : Number.parseInt(videoInfo.duration)
+      moments = await aiService.analyzeTranscriptWithTimestamps(transcript, prompt, analysisDuration)
     } catch (aiAnalysisError) {
       console.error("❌ AI transcript analysis failed:", aiAnalysisError)
       await cleanupTempFiles(tempFiles)
@@ -220,6 +243,7 @@ export const generateGifs = async (req, res) => {
       captionSource: youtubeUrl ? "YouTube Captions + AI Analysis" : "Video Content Analysis",
       errors: errors.length > 0 ? errors : undefined,
       videoContentUsed: isVideoDownloadSuccessful, // Indicate if actual video content was used
+      isSegmented: videoInfo.isSegmented || false, // Indicate if this was a segmented video
     })
   } catch (error) {
     console.error("❌ GIF generation failed:", error)

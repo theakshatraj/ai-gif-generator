@@ -34,8 +34,8 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
       const duration = await checkVideoDuration(file)
       console.log(`📹 Video duration: ${duration} seconds`)
 
-      // If video is longer than 9 seconds, show segment selector
-      if (duration > 9) {
+      // If video is longer than 8 seconds, show segment selector
+      if (duration > 8) {
         onLongVideoDetected(file, duration)
       } else {
         onFileSelect(file)
@@ -148,7 +148,7 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
             <p className="text-xs text-gray-500">
               MP4 files only (max 100MB)
               <br />
-              Videos longer than 9 seconds will require segment selection
+              Videos longer than 8 seconds will require segment selection
             </p>
           </div>
         </div>

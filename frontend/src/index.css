@@ -50,3 +50,50 @@ body {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
+
+/* Custom styles for video segment selector */
+.video-timeline {
+  @apply relative w-full h-2 bg-gray-200 rounded-lg;
+}
+
+.video-timeline::-webkit-slider-thumb {
+  @apply appearance-none w-4 h-4 bg-blue-600 rounded-full cursor-pointer;
+}
+
+.video-timeline::-moz-range-thumb {
+  @apply appearance-none w-4 h-4 bg-blue-600 rounded-full cursor-pointer border-0;
+}
+
+.segment-indicator {
+  @apply absolute top-0 h-2 bg-blue-500 rounded-lg pointer-events-none transition-all duration-200;
+}
+
+/* Animation for segment processing */
+@keyframes segment-processing {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.segment-processing {
+  animation: segment-processing 1s ease-in-out infinite;
+}
+
+/* Custom scrollbar for video player */
+.video-player::-webkit-scrollbar {
+  width: 6px;
+}
+
+.video-player::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.video-player::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.video-player::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

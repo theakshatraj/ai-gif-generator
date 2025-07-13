@@ -6,7 +6,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
   const videoRef = useRef(null)
   const [duration, setDuration] = useState(0)
   const [startTime, setStartTime] = useState(0)
-  const [endTime, setEndTime] = useState(30)
+  const [endTime, setEndTime] = useState(15) // Changed from 30 to 15 seconds max
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
@@ -22,7 +22,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
   const handleLoadedMetadata = () => {
     const videoDuration = videoRef.current.duration
     setDuration(videoDuration)
-    setEndTime(Math.min(30, videoDuration)) // Max 30 seconds or video duration
+    setEndTime(Math.min(15, videoDuration)) // Max 15 seconds or video duration
   }
 
   const handleTimeUpdate = () => {
@@ -52,9 +52,9 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
       setEndTime(Math.min(newStartTime + 2, duration))
     }
 
-    // Ensure segment doesn't exceed 30 seconds
-    if (endTime - newStartTime > 30) {
-      setEndTime(newStartTime + 30)
+    // Ensure segment doesn't exceed 15 seconds
+    if (endTime - newStartTime > 15) {
+      setEndTime(newStartTime + 15)
     }
   }
 
@@ -67,9 +67,9 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
       setStartTime(Math.max(newEndTime - 2, 0))
     }
 
-    // Ensure segment doesn't exceed 30 seconds
-    if (newEndTime - startTime > 30) {
-      setStartTime(newEndTime - 30)
+    // Ensure segment doesn't exceed 15 seconds
+    if (newEndTime - startTime > 15) {
+      setStartTime(newEndTime - 15)
     }
   }
 
@@ -116,7 +116,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
         <div className="flex items-center space-x-2">
           <span className="text-yellow-600">⚠️</span>
           <p className="text-yellow-700 text-sm">
-            <strong>Long video detected!</strong> Please select a segment (2-30 seconds) to create your GIF.
+            <strong>Long video detected!</strong> Please select a segment (2-15 seconds) to create your GIF.
           </p>
         </div>
       </div>
@@ -170,12 +170,12 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
             step="0.1"
             value={currentTime}
             onChange={(e) => handleSeek(Number.parseFloat(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="video-timeline"
           />
 
           {/* Segment Indicators */}
           <div
-            className="absolute top-0 h-2 bg-blue-500 rounded-lg pointer-events-none"
+            className="segment-indicator"
             style={{
               left: `${(startTime / duration) * 100}%`,
               width: `${((endTime - startTime) / duration) * 100}%`,
@@ -199,7 +199,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
             step="0.1"
             value={startTime}
             onChange={(e) => handleStartTimeChange(e.target.value)}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="video-timeline"
           />
         </div>
 
@@ -212,7 +212,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
             step="0.1"
             value={endTime}
             onChange={(e) => handleEndTimeChange(e.target.value)}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="video-timeline"
           />
         </div>
       </div>
@@ -234,8 +234,8 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
           </div>
         </div>
 
-        {getSegmentDuration() > 30 && (
-          <div className="mt-2 text-red-600 text-sm">⚠️ Segment too long! Maximum 30 seconds allowed.</div>
+        {getSegmentDuration() > 15 && (
+          <div className="mt-2 text-red-600 text-sm">⚠️ Segment too long! Maximum 15 seconds allowed.</div>
         )}
 
         {getSegmentDuration() < 2 && (
@@ -261,7 +261,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
 
         <button
           onClick={handleConfirmSegment}
-          disabled={getSegmentDuration() < 2 || getSegmentDuration() > 30}
+          disabled={getSegmentDuration() < 2 || getSegmentDuration() > 15}
           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
         >
           Use This Segment
