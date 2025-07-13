@@ -1,22 +1,106 @@
-// This utility is for client-side marking of a file with segment info.
-// The actual video clipping will happen on the backend.
-export const createSegmentMetadata = (originalFile, startTime, endTime) => {
-  // Create a new File object or extend the existing one with segment properties
-  const segmentedFile = new File([originalFile], originalFile.name, {
-    type: originalFile.type,
-    lastModified: originalFile.lastModified,
-  })
+// Video trimming utility using Web APIs
+class VideoTrimmer {
+  constructor() {
+    this.canvas = document.createElement("canvas")
+    this.ctx = this.canvas.getContext("2d")
+  }
 
-  // Attach custom properties to indicate it's a segmented file
-  segmentedFile.isSegmented = true
-  segmentedFile.segmentStart = startTime
-  segmentedFile.segmentEnd = endTime
+  async trimVideo(file, startTime, endTime) {
+    try {
+      console.log(`✂️ Trimming video: ${startTime}s to ${endTime}s`)
 
-  return segmentedFile
+      // For now, we'll create a trimmed blob using MediaRecorder
+      // This is a simplified approach - in production you might want to use FFmpeg.wasm
+      const video = document.createElement("video")
+      video.src = URL.createObjectURL(file)
+
+      return new Promise((resolve, reject) => {
+        video.onloadedmetadata = async () => {
+          try {
+            // Set up canvas dimensions
+            this.canvas.width = video.videoWidth
+            this.canvas.height = video.videoHeight
+
+            // Create MediaRecorder to capture the trimmed segment
+            const stream = this.canvas.captureStream(30) // 30 FPS
+            const mediaRecorder = new MediaRecorder(stream, {
+              mimeType: "video/webm;codecs=vp9",
+            })
+
+            const chunks = []
+
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                chunks.push(event.data)
+              }
+            }
+
+            mediaRecorder.onstop = () => {
+              const trimmedBlob = new Blob(chunks, { type: "video/webm" })
+
+              // Convert to File object
+              const trimmedFile = new File([trimmedBlob], `trimmed_${file.name.replace(".mp4", ".webm")}`, {
+                type: "video/webm",
+              })
+
+              URL.revokeObjectURL(video.src)
+              resolve(trimmedFile)
+            }
+
+            mediaRecorder.onerror = (error) => {
+              console.error("MediaRecorder error:", error)
+              reject(error)
+            }
+
+            // Start recording
+            mediaRecorder.start()
+
+            // Seek to start time and play
+            video.currentTime = startTime
+            video.play()
+
+            // Draw frames to canvas
+            const drawFrame = () => {
+              if (video.currentTime >= endTime) {
+                mediaRecorder.stop()
+                video.pause()
+                return
+              }
+
+              this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height)
+              requestAnimationFrame(drawFrame)
+            }
+
+            video.onseeked = () => {
+              drawFrame()
+            }
+          } catch (error) {
+            reject(error)
+          }
+        }
+
+        video.onerror = () => {
+          reject(new Error("Failed to load video for trimming"))
+        }
+      })
+    } catch (error) {
+      console.error("Video trimming failed:", error)
+      throw error
+    }
+  }
+
+  // Alternative method: Create a simple segment metadata instead of actual trimming
+  createSegmentMetadata(file, startTime, endTime) {
+    // Create a new File object with segment metadata
+    const segmentFile = new File([file], file.name, { type: file.type })
+
+    // Add custom properties for segment info
+    segmentFile.segmentStart = startTime
+    segmentFile.segmentEnd = endTime
+    segmentFile.isSegmented = true
+
+    return segmentFile
+  }
 }
 
-export const formatTime = (seconds) => {
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = Math.floor(seconds % 60)
-  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
-}
+export default new VideoTrimmer()

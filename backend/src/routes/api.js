@@ -1,48 +1,84 @@
 import express from "express"
 import multer from "multer"
-import { generateGifs, getGif } from "../controllers/generateGifs.js"
-import youtubeService from "../services/youtubeService.js" // Import youtubeService
+import path from "path"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
 // Configure multer for file uploads
-const upload = multer({
-  dest: "uploads/", // Temporary directory for uploaded files
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB limit
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, "../../uploads")
+    cb(null, uploadDir)
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
+    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname))
+  },
 })
 
-// Route to generate GIFs
-router.post("/generate", upload.single("video"), generateGifs)
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: Number.parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024, // 100MB default
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /mp4|avi|mov|wmv|flv|webm|mkv/
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase())
+    const mimetype = allowedTypes.test(file.mimetype)
 
-// Route to get a specific GIF by ID
-router.get("/gifs/:id", getGif)
+    if (mimetype && extname) {
+      return cb(null, true)
+    } else {
+      cb(new Error("Only video files are allowed!"))
+    }
+  },
+})
 
-// Route to test API connection
+// Test route (doesn't require AI services)
 router.get("/test", (req, res) => {
   res.json({
     success: true,
-    message: "API is working!",
-    openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
+    message: "API is working",
+    timestamp: new Date().toISOString(),
+    environment: {
+      nodeEnv: process.env.NODE_ENV,
+      openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
+    },
   })
 })
 
-// NEW: Route to get YouTube video info (duration, title)
-router.get("/video-info", async (req, res) => {
-  const { youtubeUrl } = req.query
-  if (!youtubeUrl) {
-    return res.status(400).json({ success: false, error: "YouTube URL is required" })
-  }
-
+// Lazy load controllers only when needed
+router.post("/generate", upload.single("video"), async (req, res) => {
   try {
-    const videoInfo = await youtubeService.getVideoMetadata(youtubeUrl)
-    res.json({
-      success: true,
-      title: videoInfo.title,
-      duration: videoInfo.duration,
-    })
+    // Dynamic import of controller
+    const { generateGifs } = await import("../controllers/gifController.js")
+    return generateGifs(req, res)
   } catch (error) {
-    console.error("❌ Error fetching YouTube video info:", error)
-    res.status(500).json({ success: false, error: error.message || "Failed to fetch YouTube video info" })
+    console.error("❌ Error loading GIF controller:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to load GIF generation service",
+      error: error.message,
+    })
+  }
+})
+
+router.get("/gifs/:id", async (req, res) => {
+  try {
+    // Dynamic import of controller
+    const { getGif } = await import("../controllers/gifController.js")
+    return getGif(req, res)
+  } catch (error) {
+    console.error("❌ Error loading GIF controller:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to load GIF service",
+      error: error.message,
+    })
   }
 })
 

@@ -26,13 +26,12 @@ export const generateGifs = async (req, res) => {
   const tempFiles = []
   try {
     console.log("🚀 Starting GIF generation process...")
-    const { prompt, youtubeUrl, segmentStart, segmentEnd } = req.body
+    const { prompt, youtubeUrl } = req.body
     const uploadedFile = req.file
 
     console.log("📝 Prompt:", prompt)
     console.log("🎥 YouTube URL:", youtubeUrl)
     console.log("📁 Uploaded file:", uploadedFile?.filename)
-    console.log(`⏱️ Segment: ${segmentStart}s - ${segmentEnd}s`)
 
     // Validate input
     if (!prompt || prompt.trim().length === 0) {
@@ -40,23 +39,6 @@ export const generateGifs = async (req, res) => {
         success: false,
         error: "Prompt is required and cannot be empty",
       })
-    }
-
-    // Validate segment parameters if provided
-    let clipStartTime = null
-    let clipDuration = null
-    if (segmentStart !== undefined && segmentEnd !== undefined) {
-      clipStartTime = Number.parseFloat(segmentStart)
-      const end = Number.parseFloat(segmentEnd)
-      clipDuration = end - clipStartTime
-
-      if (isNaN(clipStartTime) || isNaN(clipDuration) || clipStartTime < 0 || clipDuration <= 0 || clipDuration > 15) {
-        return res.status(400).json({
-          success: false,
-          error: "Invalid segment times. Segment duration must be between 0 and 15 seconds.",
-        })
-      }
-      console.log(`✂️ Requested clip: start=${clipStartTime}s, duration=${clipDuration}s`)
     }
 
     // Test OpenRouter connection first
@@ -82,11 +64,12 @@ export const generateGifs = async (req, res) => {
     if (youtubeUrl) {
       console.log("📥 Processing YouTube URL...")
       try {
+        // Use the modified videoService.getYouTubeData which now attempts download
         const youtubeData = await videoService.getYouTubeData(youtubeUrl)
         videoPath = youtubeData.videoPath
         videoInfo = youtubeData.videoInfo
         transcript = youtubeData.transcript
-        isVideoDownloadSuccessful = youtubeData.isDownloadSuccessful
+        isVideoDownloadSuccessful = youtubeData.isDownloadSuccessful // Get the flag
 
         if (videoPath) {
           tempFiles.push(videoPath) // Add the downloaded video path to tempFiles for cleanup
@@ -102,6 +85,8 @@ export const generateGifs = async (req, res) => {
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError)
         await cleanupTempFiles(tempFiles)
+        // This catch block should only be hit if metadata/transcript fetching fails,
+        // not if video download fails (as that's handled internally in videoService)
         return res.status(500).json({
           success: false,
           error: `Failed to process YouTube data (metadata/transcript): ${youtubeError.message}.`,
@@ -130,36 +115,15 @@ export const generateGifs = async (req, res) => {
       })
     }
 
-    // If a segment was specified, create a clip from the downloaded/uploaded video
-    let finalVideoPath = videoPath
-    if (clipStartTime !== null && clipDuration !== null && isVideoDownloadSuccessful) {
-      try {
-        console.log(`✂️ Creating video clip from ${videoPath} at ${clipStartTime}s for ${clipDuration}s...`)
-        const clippedVideoPath = await videoService.createClip(videoPath, clipStartTime, clipDuration)
-        tempFiles.push(clippedVideoPath) // Add clipped video to temp files for cleanup
-        finalVideoPath = clippedVideoPath
-        // Update videoInfo duration to reflect the clipped duration for AI analysis
-        videoInfo.duration = clipDuration
-        console.log(`✅ Video clipped successfully to: ${finalVideoPath}`)
-      } catch (clipError) {
-        console.error("❌ Failed to create video clip:", clipError)
-        // If clipping fails, we can still try to proceed with text-only GIFs if transcript is available
-        isVideoDownloadSuccessful = false
-        finalVideoPath = null
-        console.warn("⚠️ Video clipping failed. Will attempt to generate text-only GIFs.")
-      }
-    }
-
     console.log("📊 Video info:", videoInfo)
     console.log("📝 Transcript preview:", transcript.text.substring(0, 300) + "...")
-    console.log(`DEBUG: finalVideoPath = ${finalVideoPath}`)
+    console.log(`DEBUG: videoPath = ${videoPath}`)
     console.log(`DEBUG: isVideoDownloadSuccessful = ${isVideoDownloadSuccessful}`)
 
     // Analyze transcript with AI
     console.log("🤖 Analyzing transcript with AI...")
     let moments
     try {
-      // Pass the potentially updated videoInfo.duration (clipped duration) to AI service
       moments = await aiService.analyzeTranscriptWithTimestamps(transcript, prompt, Number.parseInt(videoInfo.duration))
     } catch (aiAnalysisError) {
       console.error("❌ AI transcript analysis failed:", aiAnalysisError)
@@ -190,9 +154,9 @@ export const generateGifs = async (req, res) => {
       console.log(`⏱️ Time: ${moment.startTime}s - ${moment.endTime}s`)
       console.log(`💬 Caption: ${moment.caption}`)
       try {
-        if (isVideoDownloadSuccessful && finalVideoPath) {
+        if (isVideoDownloadSuccessful) {
           console.log(`🎨 Creating GIF ${i + 1} from video...`)
-          const gif = await gifService.createGif(finalVideoPath, moment, videoInfo)
+          const gif = await gifService.createGif(videoPath, moment, videoInfo)
           gifs.push(gif)
           console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
         } else {
