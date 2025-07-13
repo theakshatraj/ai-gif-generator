@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Install essential tools and system dependencies
 # python3-venv is added for better pip environment management
+# Added Chromium and its dependencies for Puppeteer
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
@@ -20,6 +21,43 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     python3-dev \
     streamlink \
+    # Chromium dependencies for Puppeteer
+    chromium \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm-dev \
+    libxkbcommon-dev \
+    libgbm-dev \
+    libasound2 \
+    libatk1.0-0 \
+    libcairo2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgcc1 \
+    libgdk-pixbuf2.0-0 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    # Fonts for Chromium
+    fonts-liberation \
+    # Clean up apt cache to reduce image size
     && rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp directly from latest release (stable + fast)
@@ -42,7 +80,7 @@ RUN mkdir -p /app/.config/yt-dlp && \
     echo "--retries 3" >> /app/.config/yt-dlp/config && \
     echo "--fragment-retries 3" >> /app/.config/yt-dlp/config
 
-# Puppeteer/Playwright install bypass (skip Chromium to avoid Railway timeout)
+# Puppeteer/Playwright install bypass (skip Chromium download by npm/yarn)
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
