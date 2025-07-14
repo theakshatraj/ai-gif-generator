@@ -93,43 +93,29 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
     }
   }
 
-  // New: Handle multiple YouTube URLs
+  // Handle single YouTube URL (video or shorts, including playlist links)
   const handleYouTubeSubmit = async () => {
     setUrlError("");
-    // Split by newline, comma, or space
-    let urls = youtubeInput
-      .split(/[\n,]+/)
-      .map((u) => u.trim())
-      .filter((u) => u.length > 0);
-    if (urls.length === 0) {
-      setUrlError("Please enter at least one YouTube URL.");
+    const url = youtubeInput.trim();
+    if (!url) {
+      setUrlError("Please enter a YouTube video or Shorts URL.");
       return;
     }
-    // Normalize and validate
-    const normalized = urls.map(extractSingleVideoUrl);
-    const invalids = urls.filter((u, i) => !normalized[i]);
-    if (invalids.length > 0) {
-      setUrlError(
-        `Invalid YouTube URL(s):\n${invalids.join("\n")}\nPlease enter only valid YouTube video or shorts URLs.`
-      );
+    const normalized = extractSingleVideoUrl(url);
+    if (!normalized) {
+      setUrlError("Invalid YouTube video or Shorts URL. Please enter a valid link.");
       return;
     }
-    // Remove duplicates
-    const uniqueUrls = Array.from(new Set(normalized));
-    // Optionally: Check durations for each (first one only for now)
     setCheckingDuration(true);
     try {
-      // If any are long, trigger segment selector for that one only (for now)
-      // (You can extend to support segment selection for each in the future)
-      const meta = await apiService.getYoutubeMetadata(uniqueUrls[0]);
+      const meta = await apiService.getYoutubeMetadata(normalized);
       if (meta.duration > 8) {
-        onLongVideoDetected({ youtubeUrl: uniqueUrls[0], duration: meta.duration });
+        onLongVideoDetected({ youtubeUrl: normalized, duration: meta.duration });
       } else {
-        onYouTubeUrl(uniqueUrls);
+        onYouTubeUrl(normalized);
       }
     } catch (e) {
-      // fallback: just pass the URLs
-      onYouTubeUrl(uniqueUrls);
+      onYouTubeUrl(normalized); // fallback
     } finally {
       setCheckingDuration(false);
     }
@@ -139,14 +125,14 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
     <div className="space-y-6 animate-slide-up">
       {/* YouTube URL Input */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">YouTube URLs (one per line or comma)</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Video or Shorts URL</label>
         <div className="flex gap-2">
-          <textarea
+          <input
+            type="url"
             value={youtubeInput}
             onChange={(e) => setYoutubeInput(e.target.value)}
-            placeholder="Paste one or more YouTube video URLs here..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors min-h-[48px] resize-y"
-            rows={3}
+            placeholder="Paste a YouTube video or Shorts URL here..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
             disabled={checkingDuration}
           />
           <button
