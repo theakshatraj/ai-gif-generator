@@ -13,6 +13,10 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
   const [isPlaying, setIsPlaying] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
 
+  const setPlayerRef = (player) => {
+    playerRef.current = player;
+  };
+
   useEffect(() => {
     if (file) {
       const url = URL.createObjectURL(file)
@@ -167,7 +171,7 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
       <div className="relative bg-black rounded-lg overflow-hidden">
         {youtubeUrl ? (
           <ReactPlayer
-            ref={playerRef}
+            ref={setPlayerRef}
             url={youtubeUrl}
             controls={false}
             playing={isPlaying}
