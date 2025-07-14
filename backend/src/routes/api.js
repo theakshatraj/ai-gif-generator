@@ -82,4 +82,16 @@ router.get("/gifs/:id", async (req, res) => {
   }
 })
 
+router.get("/youtube-metadata", async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: "Missing url" });
+    const { default: youtubeService } = await import("../services/youtubeService.js");
+    const meta = await youtubeService.getVideoMetadata(url);
+    res.json(meta);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router

@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import ReactPlayer from "react-player";
 
-const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
+const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) => {
   const videoRef = useRef(null)
+  const playerRef = useRef(null)
   const [duration, setDuration] = useState(0)
   const [startTime, setStartTime] = useState(0)
   const [endTime, setEndTime] = useState(15) // Changed from 30 to 15 seconds max
@@ -19,6 +21,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
     }
   }, [file])
 
+  // For regular video files
   const handleLoadedMetadata = () => {
     const videoDuration = videoRef.current.duration
     setDuration(videoDuration)
@@ -29,17 +32,44 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
     setCurrentTime(videoRef.current.currentTime)
   }
 
-  const handlePlayPause = () => {
-    if (isPlaying) {
-      videoRef.current.pause()
-    } else {
-      videoRef.current.play()
+  // For ReactPlayer (YouTube)
+  const handlePlayerDuration = (duration) => {
+    setDuration(duration)
+    setEndTime(Math.min(15, duration)) // Max 15 seconds or video duration
+  }
+
+  const handlePlayerProgress = (state) => {
+    setCurrentTime(state.playedSeconds)
+    if (state.playedSeconds >= endTime && isPlaying) {
+      setIsPlaying(false)
     }
-    setIsPlaying(!isPlaying)
+  }
+
+  const handlePlayerSeek = (time) => {
+    setCurrentTime(time)
+  }
+
+  const handlePlayPause = () => {
+    if (youtubeUrl) {
+      setIsPlaying(!isPlaying)
+    } else {
+      if (isPlaying) {
+        videoRef.current.pause()
+      } else {
+        videoRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
   }
 
   const handleSeek = (time) => {
-    videoRef.current.currentTime = time
+    if (youtubeUrl) {
+      if (playerRef.current) {
+        playerRef.current.seekTo(time)
+      }
+    } else {
+      videoRef.current.currentTime = time
+    }
     setCurrentTime(time)
   }
 
@@ -92,15 +122,27 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
   }
 
   const previewSegment = () => {
-    videoRef.current.currentTime = startTime
-    videoRef.current.play()
-    setIsPlaying(true)
+    if (youtubeUrl) {
+      if (playerRef.current) {
+        playerRef.current.seekTo(startTime)
+        setIsPlaying(true)
+      }
+    } else {
+      videoRef.current.currentTime = startTime
+      videoRef.current.play()
+      setIsPlaying(true)
+    }
 
     // Stop at end time
     const checkTime = () => {
-      if (videoRef.current.currentTime >= endTime) {
-        videoRef.current.pause()
-        setIsPlaying(false)
+      const current = youtubeUrl ? currentTime : videoRef.current?.currentTime || 0
+      if (current >= endTime) {
+        if (youtubeUrl) {
+          setIsPlaying(false)
+        } else {
+          videoRef.current.pause()
+          setIsPlaying(false)
+        }
       } else {
         requestAnimationFrame(checkTime)
       }
@@ -108,7 +150,7 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
     checkTime()
   }
 
-  if (!videoUrl) return null
+  if (!videoUrl && !youtubeUrl) return null
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -123,15 +165,30 @@ const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
 
       {/* Video Player */}
       <div className="relative bg-black rounded-lg overflow-hidden">
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          className="w-full h-64 object-contain"
-          onLoadedMetadata={handleLoadedMetadata}
-          onTimeUpdate={handleTimeUpdate}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-        />
+        {youtubeUrl ? (
+          <ReactPlayer
+            ref={playerRef}
+            url={youtubeUrl}
+            controls={false}
+            playing={isPlaying}
+            onDuration={handlePlayerDuration}
+            onProgress={handlePlayerProgress}
+            onSeek={handlePlayerSeek}
+            width="100%"
+            height="256px"
+            progressInterval={100}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            className="w-full h-64 object-contain"
+            onLoadedMetadata={handleLoadedMetadata}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+          />
+        )}
 
         {/* Play/Pause Overlay */}
         <div className="absolute inset-0 flex items-center justify-center">

@@ -23,6 +23,7 @@ function App() {
   const [longVideo, setLongVideo] = useState(null);
   const [selectedSegment, setSelectedSegment] = useState(null);
   const [processingSegment, setProcessingSegment] = useState(false);
+  const [youtubeSegment, setYoutubeSegment] = useState(null);
 
   // Test server connection on component mount
   useEffect(() => {
@@ -54,6 +55,7 @@ function App() {
     setError("");
     setShowSegmentSelector(false);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
   const handleYouTubeUrl = (url) => {
@@ -62,13 +64,21 @@ function App() {
     setError("");
     setShowSegmentSelector(false);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
-  const handleLongVideoDetected = (videoFile, duration) => {
-    console.log(`📹 Long video detected: ${duration} seconds`);
-    setLongVideo({ file: videoFile, duration });
-    setShowSegmentSelector(true);
-    setFile(null); // Clear the file until segment is selected
+  const handleLongVideoDetected = (data, duration) => {
+    if (data.youtubeUrl) {
+      console.log(`📹 Long YouTube video detected: ${data.duration} seconds`);
+      setLongVideo({ youtubeUrl: data.youtubeUrl, duration: data.duration });
+      setShowSegmentSelector(true);
+      setYoutubeUrl(""); // Clear until segment is selected
+    } else {
+      console.log(`📹 Long video detected: ${duration} seconds`);
+      setLongVideo({ file: data, duration });
+      setShowSegmentSelector(true);
+      setFile(null); // Clear the file until segment is selected
+    }
   };
 
   const handleSegmentSelect = async (segment) => {
@@ -78,19 +88,27 @@ function App() {
     try {
       console.log("✂️ Processing video segment:", segment);
 
-      // Use the enhanced trimming functionality
-      const trimmedFile = await videoTrimmer.createTrimmedSegment(
-        longVideo.file,
-        segment.startTime,
-        segment.endTime
-      );
+      if (longVideo.youtubeUrl) {
+        // Handle YouTube video segment
+        setYoutubeSegment(segment);
+        setYoutubeUrl(longVideo.youtubeUrl);
+        setShowSegmentSelector(false);
+        setLongVideo(null);
+        console.log("✅ YouTube segment selected successfully");
+      } else {
+        // Handle file video segment - existing logic
+        const trimmedFile = await videoTrimmer.createTrimmedSegment(
+          longVideo.file,
+          segment.startTime,
+          segment.endTime
+        );
 
-      setFile(trimmedFile);
-      setSelectedSegment(segment);
-      setShowSegmentSelector(false);
-      setLongVideo(null);
-
-      console.log("✅ Segment processed successfully");
+        setFile(trimmedFile);
+        setSelectedSegment(segment);
+        setShowSegmentSelector(false);
+        setLongVideo(null);
+        console.log("✅ File segment processed successfully");
+      }
     } catch (error) {
       console.error("❌ Error processing segment:", error);
       setError("Failed to process video segment. Please try again.");
@@ -103,6 +121,7 @@ function App() {
     setShowSegmentSelector(false);
     setLongVideo(null);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
   const handleGenerate = async () => {
@@ -132,6 +151,13 @@ function App() {
 
       if (youtubeUrl) {
         formData.append("youtubeUrl", youtubeUrl);
+        
+        // Add YouTube segment information if available
+        if (youtubeSegment) {
+          formData.append("segmentStart", youtubeSegment.startTime.toString());
+          formData.append("segmentEnd", youtubeSegment.endTime.toString());
+          formData.append("isSegmented", "true");
+        }
       }
 
       console.log("🚀 Sending request to generate GIFs...");
@@ -164,6 +190,7 @@ function App() {
     setShowSegmentSelector(false);
     setLongVideo(null);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
   return (
@@ -254,7 +281,15 @@ function App() {
                         )}
                       </>
                     ) : (
-                      `YouTube URL: ${youtubeUrl}`
+                      <>
+                        YouTube URL: {youtubeUrl}
+                        {youtubeSegment && (
+                          <span className="ml-2 text-blue-600">
+                            (Segment: {youtubeSegment.startTime.toFixed(1)}s -{" "}
+                            {youtubeSegment.endTime.toFixed(1)}s)
+                          </span>
+                        )}
+                      </>
                     )}
                   </p>
                 </div>
@@ -287,6 +322,7 @@ function App() {
               ) : (
                 <VideoSegmentSelector
                   file={longVideo?.file}
+                  youtubeUrl={longVideo?.youtubeUrl}
                   onSegmentSelect={handleSegmentSelect}
                   onCancel={handleSegmentCancel}
                 />

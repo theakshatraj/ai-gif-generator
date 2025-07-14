@@ -82,6 +82,35 @@ export const generateGifs = async (req, res) => {
         if (!isVideoDownloadSuccessful) {
           console.warn("⚠️ YouTube video could not be downloaded. Will attempt to generate text-only GIFs.")
         }
+
+        // Handle YouTube URL segmentation
+        if (youtubeUrl && req.body.isSegmented === "true") {
+          const segmentStart = Number.parseFloat(req.body.segmentStart);
+          const segmentEnd = Number.parseFloat(req.body.segmentEnd);
+          if (!isNaN(segmentStart) && !isNaN(segmentEnd) && isVideoDownloadSuccessful) {
+            console.log(`✂️ Processing YouTube segment: ${segmentStart}s - ${segmentEnd}s`)
+            // Trim the video to the selected segment
+            const trimmedPath = await videoService.createClip(videoPath, segmentStart, segmentEnd - segmentStart);
+            tempFiles.push(trimmedPath);
+            // Use the trimmed video for further processing
+            videoPath = trimmedPath;
+            // Update videoInfo to reflect the segment
+            videoInfo.originalDuration = videoInfo.duration;
+            videoInfo.duration = segmentEnd - segmentStart;
+            videoInfo.isSegmented = true;
+            videoInfo.segmentStart = segmentStart;
+            videoInfo.segmentEnd = segmentEnd;
+          } else if (!isNaN(segmentStart) && !isNaN(segmentEnd) && !isVideoDownloadSuccessful) {
+            console.log(`✂️ Processing YouTube segment metadata: ${segmentStart}s - ${segmentEnd}s (video not downloaded)`)
+            // Update videoInfo to reflect the segment even if video wasn't downloaded
+            videoInfo.originalDuration = videoInfo.duration;
+            videoInfo.duration = segmentEnd - segmentStart;
+            videoInfo.isSegmented = true;
+            videoInfo.segmentStart = segmentStart;
+            videoInfo.segmentEnd = segmentEnd;
+          }
+        }
+
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError)
         await cleanupTempFiles(tempFiles)

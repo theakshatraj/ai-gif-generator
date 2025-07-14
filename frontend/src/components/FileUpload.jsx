@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import apiService from "../services/api";
 
 const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
   const [youtubeUrl, setYoutubeUrl] = useState("")
@@ -83,11 +84,25 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
           />
           <button
-            onClick={() => onYouTubeUrl(youtubeUrl)}
-            disabled={!youtubeUrl.trim()}
+            onClick={async () => {
+              try {
+                setCheckingDuration(true);
+                const meta = await apiService.getYoutubeMetadata(youtubeUrl);
+                if (meta.duration > 8) {
+                  onLongVideoDetected({ youtubeUrl, duration: meta.duration });
+                } else {
+                  onYouTubeUrl(youtubeUrl);
+                }
+              } catch (e) {
+                onYouTubeUrl(youtubeUrl); // fallback
+              } finally {
+                setCheckingDuration(false);
+              }
+            }}
+            disabled={!youtubeUrl.trim() || checkingDuration}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
-            Load
+            {checkingDuration ? "Checking..." : "Load"}
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-1">Note: Long YouTube videos will also require segment selection</p>
