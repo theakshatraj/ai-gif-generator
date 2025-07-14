@@ -110,6 +110,17 @@ class ApiService {
       return false;
     }
   }
+
+  async getYoutubeMetadata(url) {
+    try {
+      const response = await fetch(`${this.baseURL}/youtube-metadata?url=${encodeURIComponent(url)}`);
+      if (!response.ok) throw new Error("Failed to fetch YouTube metadata");
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Error fetching YouTube metadata:", error);
+      throw error;
+    }
+  }
 }
 
 export default new ApiService();
