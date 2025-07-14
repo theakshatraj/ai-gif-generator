@@ -12,7 +12,7 @@ function App() {
   const [step, setStep] = useState(1);
   const [prompt, setPrompt] = useState("");
   const [file, setFile] = useState(null);
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeUrls, setYoutubeUrls] = useState([]); // Array of URLs
   const [loading, setLoading] = useState(false);
   const [gifs, setGifs] = useState([]);
   const [error, setError] = useState("");
@@ -51,15 +51,16 @@ function App() {
 
   const handleFileSelect = (selectedFile) => {
     setFile(selectedFile);
-    setYoutubeUrl("");
+    setYoutubeUrls([]);
     setError("");
     setShowSegmentSelector(false);
     setSelectedSegment(null);
     setYoutubeSegment(null);
   };
 
-  const handleYouTubeUrl = (url) => {
-    setYoutubeUrl(url);
+  // Accepts array of URLs
+  const handleYouTubeUrl = (urls) => {
+    setYoutubeUrls(Array.isArray(urls) ? urls : [urls]);
     setFile(null);
     setError("");
     setShowSegmentSelector(false);
@@ -72,7 +73,7 @@ function App() {
       console.log(`📹 Long YouTube video detected: ${data.duration} seconds`);
       setLongVideo({ youtubeUrl: data.youtubeUrl, duration: data.duration });
       setShowSegmentSelector(true);
-      setYoutubeUrl(""); // Clear until segment is selected
+      setYoutubeUrls([]); // Clear until segment is selected
     } else {
       console.log(`📹 Long video detected: ${duration} seconds`);
       setLongVideo({ file: data, duration });
@@ -91,7 +92,7 @@ function App() {
       if (longVideo.youtubeUrl) {
         // Handle YouTube video segment
         setYoutubeSegment(segment);
-        setYoutubeUrl(longVideo.youtubeUrl);
+        setYoutubeUrls([longVideo.youtubeUrl]);
         setShowSegmentSelector(false);
         setLongVideo(null);
         console.log("✅ YouTube segment selected successfully");
@@ -125,7 +126,7 @@ function App() {
   };
 
   const handleGenerate = async () => {
-    if (!prompt || (!file && !youtubeUrl)) {
+    if (!prompt || (!file && (!youtubeUrls || youtubeUrls.length === 0))) {
       setError("Please provide both a prompt and a video source");
       return;
     }
@@ -149,10 +150,9 @@ function App() {
         }
       }
 
-      if (youtubeUrl) {
-        formData.append("youtubeUrl", youtubeUrl);
-        
-        // Add YouTube segment information if available
+      if (youtubeUrls && youtubeUrls.length > 0) {
+        youtubeUrls.forEach((url) => formData.append("youtubeUrls[]", url));
+        // Add YouTube segment information if available (applies to all for now)
         if (youtubeSegment) {
           formData.append("segmentStart", youtubeSegment.startTime.toString());
           formData.append("segmentEnd", youtubeSegment.endTime.toString());
@@ -184,7 +184,7 @@ function App() {
     setStep(1);
     setGifs([]);
     setFile(null);
-    setYoutubeUrl("");
+    setYoutubeUrls([]);
     setPrompt("");
     setError("");
     setShowSegmentSelector(false);
@@ -266,7 +266,7 @@ function App() {
                 onLongVideoDetected={handleLongVideoDetected}
               />
 
-              {(file || youtubeUrl) && (
+              {(file || (youtubeUrls && youtubeUrls.length > 0)) && (
                 <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-green-700 text-sm">
                     ✅{" "}
@@ -282,7 +282,7 @@ function App() {
                       </>
                     ) : (
                       <>
-                        YouTube URL: {youtubeUrl}
+                        YouTube URL{youtubeUrls.length > 1 ? "s" : ""}: {youtubeUrls.join(", ")}
                         {youtubeSegment && (
                           <span className="ml-2 text-blue-600">
                             (Segment: {youtubeSegment.startTime.toFixed(1)}s -{" "}
@@ -298,7 +298,7 @@ function App() {
               <div className="mt-8 flex justify-end">
                 <button
                   onClick={() => setStep(2)}
-                  disabled={!file && !youtubeUrl}
+                  disabled={!file && !youtubeUrls.length === 0}
                   className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                 >
                   Next Step →
