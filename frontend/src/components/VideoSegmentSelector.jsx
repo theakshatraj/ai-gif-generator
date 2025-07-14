@@ -12,7 +12,10 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
+  const [playerReady, setPlayerReady] = useState(false)
+  const [playerError, setPlayerError] = useState(false)
 
+  // Use a callback ref for ReactPlayer
   const setPlayerRef = (player) => {
     playerRef.current = player;
   };
@@ -127,9 +130,11 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
 
   const previewSegment = () => {
     if (youtubeUrl) {
-      if (playerRef.current) {
+      if (playerRef.current && typeof playerRef.current.seekTo === "function") {
         playerRef.current.seekTo(startTime)
         setIsPlaying(true)
+      } else {
+        console.warn("ReactPlayer instance not ready or seekTo not available.");
       }
     } else {
       videoRef.current.currentTime = startTime
@@ -170,18 +175,27 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
       {/* Video Player */}
       <div className="relative bg-black rounded-lg overflow-hidden">
         {youtubeUrl ? (
-          <ReactPlayer
-            ref={setPlayerRef}
-            url={youtubeUrl}
-            controls={false}
-            playing={isPlaying}
-            onDuration={handlePlayerDuration}
-            onProgress={handlePlayerProgress}
-            onSeek={handlePlayerSeek}
-            width="100%"
-            height="256px"
-            progressInterval={100}
-          />
+          <>
+            <ReactPlayer
+              ref={setPlayerRef}
+              url={youtubeUrl}
+              controls={false}
+              playing={isPlaying}
+              onDuration={setDuration}
+              onProgress={handlePlayerProgress}
+              onSeek={handlePlayerSeek}
+              width="100%"
+              height="256px"
+              progressInterval={100}
+              onReady={() => { setPlayerReady(true); setPlayerError(false); }}
+              onError={() => { setPlayerError(true); setPlayerReady(false); }}
+            />
+            {playerError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-80">
+                <span className="text-red-500 font-bold">Failed to load YouTube video. Please check the URL or try another video.</span>
+              </div>
+            )}
+          </>
         ) : (
           <video
             ref={videoRef}
