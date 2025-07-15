@@ -5,108 +5,159 @@ import videoAnalysisService from "../services/videoAnalysisService.js"
 import aiService from "../services/aiService.js"
 import gifService from "../services/gifService.js"
 
+// Helper function for cleanup
+async function cleanupTempFiles(files) {
+  if (!files || files.length === 0) return
+  console.log(`🗑️ Cleaning up ${files.length} temporary files...`)
+  for (const file of files) {
+    try {
+      if (fs.existsSync(file)) {
+        await fs.promises.unlink(file)
+        console.log(`✅ Deleted temp file: ${file}`)
+      }
+    } catch (error) {
+      console.error(`❌ Failed to delete temp file ${file}:`, error)
+    }
+  }
+}
+
 export const generateGifs = async (req, res) => {
   const startTime = Date.now()
   const tempFiles = []
-
   try {
-    console.log("🚀 Starting Enhanced GIF generation process...")
-    const { prompt, youtubeUrl, segmentStart, segmentEnd, isSegmented } = req.body
+    console.log("🚀 Starting GIF generation process...")
+    const { prompt, youtubeUrl } = req.body
     const uploadedFile = req.file
 
-    console.log("📝 User Prompt:", prompt)
+    console.log("📝 Prompt:", prompt)
     console.log("🎥 YouTube URL:", youtubeUrl)
     console.log("📁 Uploaded file:", uploadedFile?.filename)
-    console.log("✂️ Segment info:", { isSegmented, segmentStart, segmentEnd })
 
     // Validate input
     if (!prompt || prompt.trim().length === 0) {
       return res.status(400).json({
         success: false,
-        error: "Please provide a prompt describing what kind of GIF you want",
+        error: "Prompt is required and cannot be empty",
       })
     }
 
     // Test OpenRouter connection first
-    const connectionTest = await aiService.testConnection()
-    if (!connectionTest) {
-      console.log("⚠️ OpenRouter connection failed, will use enhanced fallback methods")
+    let connectionTest = false
+    try {
+      connectionTest = await aiService.testConnection()
+      if (!connectionTest) {
+        console.log("⚠️ OpenRouter connection failed, will use fallback methods")
+      }
+    } catch (aiError) {
+      console.error("❌ AI service connection test failed:", aiError)
+      return res.status(500).json({
+        success: false,
+        error: "AI service is not available. Please check your OpenRouter API key.",
+      })
     }
 
     let videoPath
     let videoInfo
     let transcript
-    let contentSource = "Unknown"
-    let actualStartTime = 0
-    let actualEndTime = null
+    let isVideoDownloadSuccessful = false // New flag to track video download success
 
     if (youtubeUrl) {
-      console.log("📥 Downloading from YouTube...")
-      const result = await videoService.downloadFromYoutube(youtubeUrl)
-      videoPath = result.videoPath
-      videoInfo = result.videoInfo
-      tempFiles.push(videoPath)
-
-      // For YouTube videos, we'll need to handle segmentation differently
-      // For now, we'll process the full video but note this for future enhancement
-      console.log("📝 Attempting to get YouTube captions...")
+      console.log("📥 Processing YouTube URL...")
       try {
-        transcript = await videoService.downloadYoutubeCaptions(youtubeUrl)
-        console.log("✅ YouTube captions downloaded successfully")
-        contentSource = "YouTube Captions"
-      } catch (captionError) {
-        console.log("⚠️ YouTube captions not available, using enhanced video analysis...")
-        transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
-        contentSource = "Enhanced Video Analysis"
+        // Use the modified videoService.getYouTubeData which now attempts download
+        const youtubeData = await videoService.getYouTubeData(youtubeUrl)
+        videoPath = youtubeData.videoPath
+        videoInfo = youtubeData.videoInfo
+        transcript = youtubeData.transcript
+        isVideoDownloadSuccessful = youtubeData.isDownloadSuccessful // Get the flag
+
+        if (videoPath) {
+          tempFiles.push(videoPath) // Add the downloaded video path to tempFiles for cleanup
+        }
+        console.log("✅ YouTube data processed successfully")
+        console.log(`📹 Video duration: ${videoInfo.duration}s`)
+        console.log(`🎬 Video title: ${videoInfo.title}`)
+        console.log(`📝 Transcript preview: ${transcript.text.substring(0, 200)}...`)
+
+        if (!isVideoDownloadSuccessful) {
+          console.warn("⚠️ YouTube video could not be downloaded. Will attempt to generate text-only GIFs.")
+        }
+
+        // Handle YouTube URL segmentation
+        if (youtubeUrl && req.body.isSegmented === "true") {
+          const segmentStart = Number.parseFloat(req.body.segmentStart);
+          const segmentEnd = Number.parseFloat(req.body.segmentEnd);
+          if (!isNaN(segmentStart) && !isNaN(segmentEnd) && isVideoDownloadSuccessful) {
+            console.log(`✂️ Processing YouTube segment: ${segmentStart}s - ${segmentEnd}s`)
+            // Trim the video to the selected segment
+            const trimmedPath = await videoService.createClip(videoPath, segmentStart, segmentEnd - segmentStart);
+            tempFiles.push(trimmedPath);
+            // Use the trimmed video for further processing
+            videoPath = trimmedPath;
+            // Update videoInfo to reflect the segment
+            videoInfo.originalDuration = videoInfo.duration;
+            videoInfo.duration = segmentEnd - segmentStart;
+            videoInfo.isSegmented = true;
+            videoInfo.segmentStart = segmentStart;
+            videoInfo.segmentEnd = segmentEnd;
+          } else if (!isNaN(segmentStart) && !isNaN(segmentEnd) && !isVideoDownloadSuccessful) {
+            console.log(`✂️ Processing YouTube segment metadata: ${segmentStart}s - ${segmentEnd}s (video not downloaded)`)
+            // Update videoInfo to reflect the segment even if video wasn't downloaded
+            videoInfo.originalDuration = videoInfo.duration;
+            videoInfo.duration = segmentEnd - segmentStart;
+            videoInfo.isSegmented = true;
+            videoInfo.segmentStart = segmentStart;
+            videoInfo.segmentEnd = segmentEnd;
+          }
+        }
+
+      } catch (youtubeError) {
+        console.error("❌ YouTube processing failed:", youtubeError)
+        await cleanupTempFiles(tempFiles)
+        // This catch block should only be hit if metadata/transcript fetching fails,
+        // not if video download fails (as that's handled internally in videoService)
+        return res.status(500).json({
+          success: false,
+          error: `Failed to process YouTube data (metadata/transcript): ${youtubeError.message}.`,
+        })
       }
     } else if (uploadedFile) {
-      console.log("📁 Using uploaded file...")
-      videoPath = uploadedFile.path
-
-      // Handle segmented videos
-      if (isSegmented === "true" && segmentStart && segmentEnd) {
-        console.log(`✂️ Processing segmented video: ${segmentStart}s to ${segmentEnd}s`)
-        actualStartTime = Number.parseFloat(segmentStart)
-        actualEndTime = Number.parseFloat(segmentEnd)
-
-        // Validate segment
-        if (actualEndTime - actualStartTime > 30) {
-          return res.status(400).json({
-            success: false,
-            error: "Segment too long. Maximum 30 seconds allowed.",
-          })
-        }
-
-        if (actualEndTime - actualStartTime < 2) {
-          return res.status(400).json({
-            success: false,
-            error: "Segment too short. Minimum 2 seconds required.",
-          })
-        }
-
-        // Create a trimmed version of the video for processing
-        console.log("✂️ Creating trimmed video segment...")
-        const trimmedVideoPath = await videoService.createClip(
-          videoPath,
-          actualStartTime,
-          actualEndTime - actualStartTime,
-        )
-
-        // Use the trimmed video for further processing
-        videoPath = trimmedVideoPath
-        tempFiles.push(trimmedVideoPath)
-
-        // Update video info for the trimmed segment
+      console.log("📁 Processing uploaded file...")
+      try {
+        videoPath = uploadedFile.path
         videoInfo = await videoService.getVideoInfo(videoPath)
-        console.log("✅ Trimmed video created successfully")
-      } else {
-        videoInfo = await videoService.getVideoInfo(videoPath)
+        
+        // Check if this is a trimmed segment
+        const isSegmented = req.body.isSegmented === "true"
+        const segmentStart = req.body.segmentStart ? Number.parseFloat(req.body.segmentStart) : null
+        const segmentEnd = req.body.segmentEnd ? Number.parseFloat(req.body.segmentEnd) : null
+        
+        if (isSegmented && segmentStart !== null && segmentEnd !== null) {
+          console.log(`✂️ Processing trimmed segment: ${segmentStart}s - ${segmentEnd}s`)
+          // For trimmed segments, we'll analyze the entire segment content
+          // since it's already been trimmed to the desired length
+          transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+          
+          // Update video info to reflect the segment duration
+          videoInfo.originalDuration = videoInfo.duration
+          videoInfo.duration = segmentEnd - segmentStart
+          videoInfo.isSegmented = true
+          videoInfo.segmentStart = segmentStart
+          videoInfo.segmentEnd = segmentEnd
+        } else {
+          // Extract transcript from uploaded video using video analysis
+          console.log("🔍 Analyzing uploaded video content...")
+          transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
+        }
+        
+        isVideoDownloadSuccessful = true // Always true for uploaded files
+      } catch (uploadError) {
+        console.error("❌ Uploaded file processing failed:", uploadError)
+        return res.status(400).json({
+          success: false,
+          error: `Failed to process uploaded video: ${uploadError.message}`,
+        })
       }
-
-      // For uploaded files, use enhanced video analysis
-      console.log("🔍 Analyzing uploaded video content with AI vision...")
-      transcript = await videoAnalysisService.analyzeVideoContent(videoPath, videoInfo.duration, prompt)
-      contentSource = "Enhanced Video Analysis"
     } else {
       return res.status(400).json({
         success: false,
@@ -115,94 +166,63 @@ export const generateGifs = async (req, res) => {
     }
 
     console.log("📊 Video info:", videoInfo)
-    console.log("📝 Enhanced transcript preview:", transcript.text.substring(0, 300) + "...")
+    console.log("📝 Transcript preview:", transcript.text.substring(0, 300) + "...")
+    console.log(`DEBUG: videoPath = ${videoPath}`)
+    console.log(`DEBUG: isVideoDownloadSuccessful = ${isVideoDownloadSuccessful}`)
 
-    // Validate video duration (for non-segmented videos)
-    const videoDuration = Number.parseInt(videoInfo.duration)
-    if (!isSegmented || isSegmented !== "true") {
-      if (videoDuration < 2) {
-        return res.status(400).json({
-          success: false,
-          error: "Video is too short (minimum 2 seconds required)",
-        })
-      }
-
-      if (videoDuration > 600) {
-        // 10 minutes
-        return res.status(400).json({
-          success: false,
-          error: "Video is too long (maximum 10 minutes allowed). Please select a shorter segment.",
-        })
-      }
+    // Analyze transcript with AI
+    console.log("🤖 Analyzing transcript with AI...")
+    let moments
+    try {
+      // Use segment duration for segmented videos, otherwise use full duration
+      const analysisDuration = videoInfo.isSegmented ? videoInfo.duration : Number.parseInt(videoInfo.duration)
+      moments = await aiService.analyzeTranscriptWithTimestamps(transcript, prompt, analysisDuration)
+    } catch (aiAnalysisError) {
+      console.error("❌ AI transcript analysis failed:", aiAnalysisError)
+      await cleanupTempFiles(tempFiles)
+      return res.status(500).json({
+        success: false,
+        error: `AI analysis failed: ${aiAnalysisError.message}. Please try again or use a different prompt.`,
+      })
     }
 
-    // Enhanced AI analysis with better context
-    console.log("🤖 Analyzing content with enhanced AI context...")
-    const moments = await analyzeContentWithEnhancedContext(transcript, prompt, videoDuration)
-    console.log("🎬 Final moments to process:", JSON.stringify(moments, null, 2))
-
+    console.log("🎬 Moments to process:", JSON.stringify(moments, null, 2))
     if (!moments || moments.length === 0) {
+      await cleanupTempFiles(tempFiles)
       return res.status(400).json({
         success: false,
         error: "No suitable moments found for GIF creation. Try a different prompt or video.",
       })
     }
 
-    // Validate moments before processing
-    const validMoments = validateAndFilterMoments(moments, videoDuration)
-    if (validMoments.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Generated moments are invalid. Please try a different prompt.",
-      })
-    }
-
-    // Generate GIFs with enhanced error handling
+    // Generate GIFs with better error handling
     const gifs = []
     const errors = []
-    const processedMoments = []
+    let generatedTextGifs = false // Flag to track if text GIFs were generated
 
-    for (let i = 0; i < validMoments.length; i++) {
-      const moment = validMoments[i]
-      console.log(`🎬 Processing GIF ${i + 1}/${validMoments.length}`)
+    for (let i = 0; i < moments.length; i++) {
+      const moment = moments[i]
+      console.log(`🎬 Processing GIF ${i + 1}/${moments.length}`)
       console.log(`⏱️ Time: ${moment.startTime}s - ${moment.endTime}s`)
       console.log(`💬 Caption: ${moment.caption}`)
-
       try {
-        // Create GIF with enhanced parameters
-        console.log(`🎨 Creating GIF ${i + 1} with enhanced processing...`)
-        const gif = await gifService.createGif(videoPath, moment)
-
-        // Validate created GIF
-        if (gif && gif.id && fs.existsSync(path.join(process.cwd(), "output", `${gif.id}.gif`))) {
+        if (isVideoDownloadSuccessful) {
+          console.log(`🎨 Creating GIF ${i + 1} from video...`)
+          const gif = await gifService.createGif(videoPath, moment, videoInfo)
           gifs.push(gif)
-          processedMoments.push(moment)
           console.log(`✅ GIF ${i + 1} created successfully (${gif.size})`)
         } else {
-          throw new Error("GIF file was not created properly")
+          console.log(`🎨 Creating text GIF ${i + 1} (video not available)...`)
+          const gif = await gifService.createTextGif(moment, videoInfo) // Use createTextGif
+          gifs.push(gif)
+          generatedTextGifs = true
+          console.log(`✅ Text GIF ${i + 1} created successfully (${gif.size})`)
         }
-      } catch (error) {
-        console.error(`❌ Failed to create GIF ${i + 1}:`, error)
-        errors.push(`GIF ${i + 1} (${moment.startTime}s-${moment.endTime}s): ${error.message}`)
-
-        // Try to create a fallback GIF with adjusted parameters
-        try {
-          console.log(`🔄 Attempting fallback GIF creation for moment ${i + 1}...`)
-          const fallbackMoment = {
-            ...moment,
-            startTime: Math.max(0, moment.startTime - 0.5),
-            endTime: Math.min(videoDuration, moment.endTime + 0.5),
-          }
-
-          const fallbackGif = await gifService.createGif(videoPath, fallbackMoment)
-          if (fallbackGif && fallbackGif.id) {
-            gifs.push(fallbackGif)
-            processedMoments.push(fallbackMoment)
-            console.log(`✅ Fallback GIF ${i + 1} created successfully`)
-          }
-        } catch (fallbackError) {
-          console.error(`❌ Fallback GIF creation also failed:`, fallbackError)
-        }
+      } catch (gifError) {
+        console.error(`❌ Failed to create GIF ${i + 1}:`, gifError)
+        errors.push(`GIF ${i + 1}: ${gifError.message}`)
+        // Don't fail the entire process if one GIF fails
+        // Continue with the next one
       }
     }
 
@@ -210,52 +230,65 @@ export const generateGifs = async (req, res) => {
     console.log("🗑️ Cleaning up temporary files...")
     await cleanupTempFiles(tempFiles)
 
+    // Clean up browser instances
+    try {
+      await videoService.cleanup()
+    } catch (cleanupError) {
+      console.error("❌ Error during service cleanup:", cleanupError)
+      // Don't fail the response for cleanup errors
+    }
+
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2)
 
     if (gifs.length === 0) {
       console.log(`❌ No GIFs were created successfully. Errors: ${errors.join(", ")}`)
       return res.status(500).json({
         success: false,
-        error: `Failed to create any GIFs. This might be due to video format issues or timing problems. Errors: ${errors.join(", ")}`,
+        error: `Failed to create any GIFs. Errors: ${errors.join(", ")}`,
       })
     }
 
-    // Calculate success rate
-    const successRate = ((gifs.length / validMoments.length) * 100).toFixed(1)
-    console.log(
-      `🎉 Successfully generated ${gifs.length}/${validMoments.length} GIFs (${successRate}% success rate) in ${processingTime}s!`,
-    )
+    let successMessage = `Successfully generated ${gifs.length} GIFs`
+    if (generatedTextGifs) {
+      successMessage += " (some or all were text-based due to video download issues)"
+    }
+
+    console.log(`🎉 ${successMessage} in ${processingTime}s!`)
 
     res.json({
       success: true,
-      message: `Successfully generated ${gifs.length} GIFs`,
-      gifs: gifs.map((gif, index) => ({
+      message: successMessage,
+      gifs: gifs.map((gif) => ({
         id: gif.id,
         caption: gif.caption,
         startTime: gif.startTime,
         endTime: gif.endTime,
-        duration: gif.endTime - gif.startTime,
         size: gif.size,
         hasCaption: gif.hasCaption,
         url: `/gifs/${gif.id}`,
-        moment: processedMoments[index] || {},
       })),
       processingTime: `${processingTime}s`,
-      successRate: `${successRate}%`,
-      videoInfo: {
-        ...videoInfo,
-        contentSource,
-        analyzedSegments: transcript.segments ? transcript.segments.length : 0,
-        wasSegmented: isSegmented === "true",
-        originalSegment: isSegmented === "true" ? { start: actualStartTime, end: actualEndTime } : null,
-      },
+      videoInfo,
+      captionSource: youtubeUrl ? "YouTube Captions + AI Analysis" : "Video Content Analysis",
       errors: errors.length > 0 ? errors : undefined,
+      videoContentUsed: isVideoDownloadSuccessful, // Indicate if actual video content was used
+      isSegmented: videoInfo.isSegmented || false, // Indicate if this was a segmented video
     })
   } catch (error) {
     console.error("❌ GIF generation failed:", error)
+    console.error("❌ Stack trace:", error.stack)
+
     // Clean up temporary files on error
     await cleanupTempFiles(tempFiles)
 
+    // Clean up services
+    try {
+      await videoService.cleanup()
+    } catch (cleanupError) {
+      console.error("❌ Error during emergency cleanup:", cleanupError)
+    }
+
+    // Send error response
     res.status(500).json({
       success: false,
       error: error.message || "Failed to generate GIFs",
@@ -264,200 +297,17 @@ export const generateGifs = async (req, res) => {
   }
 }
 
-// ... (rest of the helper functions remain the same)
-// Enhanced content analysis with better context
-async function analyzeContentWithEnhancedContext(transcript, prompt, videoDuration) {
-  try {
-    // First, try the enhanced AI analysis
-    const aiMoments = await aiService.analyzeTranscriptWithTimestamps(transcript, prompt, videoDuration)
-
-    // Validate AI response quality
-    if (aiMoments && aiMoments.length > 0) {
-      const validAiMoments = aiMoments.filter(
-        (moment) =>
-          moment.startTime >= 0 &&
-          moment.endTime <= videoDuration &&
-          moment.startTime < moment.endTime &&
-          moment.caption &&
-          moment.caption.trim().length > 0,
-      )
-
-      if (validAiMoments.length >= 2) {
-        console.log("✅ AI analysis successful with quality moments")
-        return validAiMoments.slice(0, 3) // Return top 3 moments
-      }
-    }
-
-    console.log("⚠️ AI analysis didn't provide quality moments, creating enhanced fallback...")
-
-    // Create enhanced fallback moments based on actual content
-    return createEnhancedFallbackMoments(transcript, prompt, videoDuration)
-  } catch (error) {
-    console.error("❌ Enhanced content analysis failed:", error)
-    return createEnhancedFallbackMoments(transcript, prompt, videoDuration)
-  }
-}
-
-// Enhanced fallback moment creation
-function createEnhancedFallbackMoments(transcript, prompt, videoDuration) {
-  const moments = []
-  const promptLower = prompt.toLowerCase()
-
-  // Analyze transcript for key moments
-  const segments = transcript.segments || []
-  const hasDetailedAnalysis = segments.some((seg) => seg.frameAnalysis)
-
-  // Create contextual captions based on prompt
-  const contextualCaptions = generateContextualCaptions(promptLower, hasDetailedAnalysis)
-
-  if (videoDuration >= 9) {
-    // For longer videos, spread moments strategically
-    const positions = [
-      { start: 0, priority: "opening" },
-      { start: Math.floor(videoDuration * 0.4), priority: "middle" },
-      { start: Math.max(0, videoDuration - 4), priority: "ending" },
-    ]
-
-    positions.forEach((pos, index) => {
-      const duration = Math.min(3, videoDuration - pos.start)
-      const relevantSegment = findRelevantSegment(segments, pos.start, pos.start + duration)
-
-      moments.push({
-        startTime: pos.start,
-        endTime: pos.start + duration,
-        caption: contextualCaptions[index] || `${pos.priority} moment`,
-        reason: `Strategic ${pos.priority} moment with ${relevantSegment ? "content analysis" : "timeline positioning"}`,
-        confidence: relevantSegment ? "high" : "medium",
-      })
-    })
-  } else if (videoDuration >= 6) {
-    // For medium videos, create overlapping moments
-    for (let i = 0; i < 3; i++) {
-      const start = Math.floor((i * (videoDuration - 2)) / 2)
-      const duration = Math.min(2, videoDuration - start)
-
-      moments.push({
-        startTime: start,
-        endTime: start + duration,
-        caption: contextualCaptions[i] || `Key moment ${i + 1}`,
-        reason: `Content-aware moment based on video analysis`,
-        confidence: "medium",
-      })
-    }
-  } else {
-    // For short videos, create strategic segments
-    const segmentDuration = Math.max(1.5, videoDuration / 3)
-    for (let i = 0; i < 3; i++) {
-      const start = Math.floor((i * videoDuration) / 4)
-      const duration = Math.min(segmentDuration, videoDuration - start)
-
-      moments.push({
-        startTime: start,
-        endTime: start + duration,
-        caption: contextualCaptions[i] || `Quick moment ${i + 1}`,
-        reason: `Short video segment optimization`,
-        confidence: "medium",
-      })
-    }
-  }
-
-  console.log(`📊 Created ${moments.length} enhanced fallback moments`)
-  return moments
-}
-
-// Generate contextual captions based on prompt analysis
-function generateContextualCaptions(promptLower, hasDetailedAnalysis) {
-  const captions = []
-
-  // Analyze prompt for context
-  if (promptLower.includes("funny") || promptLower.includes("laugh") || promptLower.includes("humor")) {
-    captions.push("This is hilarious", "Can't stop laughing", "Comedy gold")
-  } else if (promptLower.includes("dance") || promptLower.includes("music") || promptLower.includes("beat")) {
-    captions.push("When the beat drops", "Dance vibes", "Music hits different")
-  } else if (promptLower.includes("reaction") || promptLower.includes("respond")) {
-    captions.push("That reaction", "Mood", "Relatable moment")
-  } else if (promptLower.includes("epic") || promptLower.includes("amazing") || promptLower.includes("awesome")) {
-    captions.push("Epic moment", "This is amazing", "Legendary")
-  } else if (promptLower.includes("cute") || promptLower.includes("adorable") || promptLower.includes("sweet")) {
-    captions.push("Too cute", "Adorable", "Sweet moment")
-  } else if (promptLower.includes("fail") || promptLower.includes("mistake") || promptLower.includes("oops")) {
-    captions.push("Epic fail", "Oops moment", "That didn't work")
-  } else if (promptLower.includes("surprise") || promptLower.includes("shock") || promptLower.includes("unexpected")) {
-    captions.push("Plot twist", "Unexpected", "Surprise!")
-  } else {
-    // Generic engaging captions
-    captions.push("Big mood", "That's a vibe", "Main character energy")
-  }
-
-  // Ensure we have at least 3 captions
-  while (captions.length < 3) {
-    captions.push("Perfect moment", "This hits", "Mood exactly")
-  }
-
-  return captions
-}
-
-// Find relevant segment for a time range
-function findRelevantSegment(segments, startTime, endTime) {
-  return segments.find(
-    (segment) =>
-      (segment.start <= startTime && segment.end >= endTime) ||
-      (segment.start >= startTime && segment.start < endTime) ||
-      (segment.end > startTime && segment.end <= endTime),
-  )
-}
-
-// Validate and filter moments
-function validateAndFilterMoments(moments, videoDuration) {
-  return moments.filter((moment) => {
-    // Basic validation
-    if (typeof moment.startTime !== "number" || typeof moment.endTime !== "number") {
-      console.log(`⚠️ Invalid moment timing: ${JSON.stringify(moment)}`)
-      return false
-    }
-
-    // Time range validation
-    if (moment.startTime < 0 || moment.endTime > videoDuration) {
-      console.log(`⚠️ Moment out of video range: ${moment.startTime}s-${moment.endTime}s`)
-      return false
-    }
-
-    // Duration validation
-    const duration = moment.endTime - moment.startTime
-    if (duration < 1 || duration > 5) {
-      console.log(`⚠️ Invalid moment duration: ${duration}s`)
-      return false
-    }
-
-    // Caption validation
-    if (!moment.caption || moment.caption.trim().length === 0) {
-      console.log(`⚠️ Missing caption for moment: ${moment.startTime}s-${moment.endTime}s`)
-      return false
-    }
-
-    return true
-  })
-}
-
-// Enhanced cleanup function
-async function cleanupTempFiles(tempFiles) {
-  const cleanupPromises = tempFiles.map(async (filePath) => {
-    try {
-      if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath)
-        console.log(`🗑️ Cleaned up: ${path.basename(filePath)}`)
-      }
-    } catch (error) {
-      console.warn(`⚠️ Failed to cleanup ${filePath}:`, error.message)
-    }
-  })
-
-  await Promise.allSettled(cleanupPromises)
-}
-
 export const getGif = async (req, res) => {
   try {
     const { id } = req.params
+    // Validate ID
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "GIF ID is required",
+      })
+    }
+
     const gifPath = path.join(process.cwd(), "output", `${id}.gif`)
     console.log(`📁 Looking for GIF: ${gifPath}`)
 
@@ -473,14 +323,30 @@ export const getGif = async (req, res) => {
     console.log(`✅ Serving GIF: ${gifPath} (${Math.round(stats.size / 1024)}KB)`)
 
     res.setHeader("Content-Type", "image/gif")
-    res.setHeader("Cache-Control", "public, max-age=31536000") // Cache for 1 year
+    res.setHeader("Cache-Control", "public, max-age=31536000")
     res.setHeader("Content-Length", stats.size)
-    res.sendFile(path.resolve(gifPath))
+
+    // Use stream for better memory management
+    const stream = fs.createReadStream(gifPath)
+    stream.pipe(res)
+
+    stream.on("error", (error) => {
+      console.error("❌ Error streaming GIF:", error)
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: "Failed to stream GIF",
+        })
+      }
+    })
   } catch (error) {
     console.error("❌ Error serving GIF:", error)
-    res.status(500).json({
-      success: false,
-      error: "Failed to serve GIF",
-    })
+    console.error("❌ Stack trace:", error.stack)
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: "Failed to serve GIF",
+      })
+    }
   }
 }
