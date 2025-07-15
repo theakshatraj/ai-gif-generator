@@ -12,7 +12,7 @@ function App() {
   const [step, setStep] = useState(1);
   const [prompt, setPrompt] = useState("");
   const [file, setFile] = useState(null);
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeUrls, setYoutubeUrls] = useState([]); // Array of URLs
   const [loading, setLoading] = useState(false);
   const [gifs, setGifs] = useState([]);
   const [error, setError] = useState("");
@@ -23,6 +23,7 @@ function App() {
   const [longVideo, setLongVideo] = useState(null);
   const [selectedSegment, setSelectedSegment] = useState(null);
   const [processingSegment, setProcessingSegment] = useState(false);
+  const [youtubeSegment, setYoutubeSegment] = useState(null);
 
   // Test server connection on component mount
   useEffect(() => {
@@ -50,25 +51,35 @@ function App() {
 
   const handleFileSelect = (selectedFile) => {
     setFile(selectedFile);
-    setYoutubeUrl("");
+    setYoutubeUrls([]);
     setError("");
     setShowSegmentSelector(false);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
-  const handleYouTubeUrl = (url) => {
-    setYoutubeUrl(url);
+  // Accepts array of URLs
+  const handleYouTubeUrl = (urls) => {
+    setYoutubeUrls(Array.isArray(urls) ? urls : [urls]);
     setFile(null);
     setError("");
     setShowSegmentSelector(false);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
-  const handleLongVideoDetected = (videoFile, duration) => {
-    console.log(`📹 Long video detected: ${duration} seconds`);
-    setLongVideo({ file: videoFile, duration });
-    setShowSegmentSelector(true);
-    setFile(null); // Clear the file until segment is selected
+  const handleLongVideoDetected = (data, duration) => {
+    if (data.youtubeUrl) {
+      console.log(`📹 Long YouTube video detected: ${data.duration} seconds`);
+      setLongVideo({ youtubeUrl: data.youtubeUrl, duration: data.duration });
+      setShowSegmentSelector(true);
+      setYoutubeUrls([]); // Clear until segment is selected
+    } else {
+      console.log(`📹 Long video detected: ${duration} seconds`);
+      setLongVideo({ file: data, duration });
+      setShowSegmentSelector(true);
+      setFile(null); // Clear the file until segment is selected
+    }
   };
 
   const handleSegmentSelect = async (segment) => {
@@ -78,19 +89,27 @@ function App() {
     try {
       console.log("✂️ Processing video segment:", segment);
 
-      // Create segment metadata (simpler approach)
-      const segmentFile = videoTrimmer.createSegmentMetadata(
-        longVideo.file,
-        segment.startTime,
-        segment.endTime
-      );
+      if (longVideo.youtubeUrl) {
+        // Handle YouTube video segment
+        setYoutubeSegment(segment);
+        setYoutubeUrls([longVideo.youtubeUrl]);
+        setShowSegmentSelector(false);
+        setLongVideo(null);
+        console.log("✅ YouTube segment selected successfully");
+      } else {
+        // Handle file video segment - existing logic
+        const trimmedFile = await videoTrimmer.createTrimmedSegment(
+          longVideo.file,
+          segment.startTime,
+          segment.endTime
+        );
 
-      setFile(segmentFile);
-      setSelectedSegment(segment);
-      setShowSegmentSelector(false);
-      setLongVideo(null);
-
-      console.log("✅ Segment processed successfully");
+        setFile(trimmedFile);
+        setSelectedSegment(segment);
+        setShowSegmentSelector(false);
+        setLongVideo(null);
+        console.log("✅ File segment processed successfully");
+      }
     } catch (error) {
       console.error("❌ Error processing segment:", error);
       setError("Failed to process video segment. Please try again.");
@@ -103,10 +122,11 @@ function App() {
     setShowSegmentSelector(false);
     setLongVideo(null);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
   const handleGenerate = async () => {
-    if (!prompt || (!file && !youtubeUrl)) {
+    if (!prompt || (!file && (!youtubeUrls || youtubeUrls.length === 0))) {
       setError("Please provide both a prompt and a video source");
       return;
     }
@@ -130,8 +150,14 @@ function App() {
         }
       }
 
-      if (youtubeUrl) {
-        formData.append("youtubeUrl", youtubeUrl);
+      if (youtubeUrls && youtubeUrls.length > 0) {
+        youtubeUrls.forEach((url) => formData.append("youtubeUrls[]", url));
+        // Add YouTube segment information if available (applies to all for now)
+        if (youtubeSegment) {
+          formData.append("segmentStart", youtubeSegment.startTime.toString());
+          formData.append("segmentEnd", youtubeSegment.endTime.toString());
+          formData.append("isSegmented", "true");
+        }
       }
 
       console.log("🚀 Sending request to generate GIFs...");
@@ -158,12 +184,13 @@ function App() {
     setStep(1);
     setGifs([]);
     setFile(null);
-    setYoutubeUrl("");
+    setYoutubeUrls([]);
     setPrompt("");
     setError("");
     setShowSegmentSelector(false);
     setLongVideo(null);
     setSelectedSegment(null);
+    setYoutubeSegment(null);
   };
 
   return (
@@ -239,7 +266,7 @@ function App() {
                 onLongVideoDetected={handleLongVideoDetected}
               />
 
-              {(file || youtubeUrl) && (
+              {(file || (youtubeUrls && youtubeUrls.length > 0)) && (
                 <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-green-700 text-sm">
                     ✅{" "}
@@ -254,7 +281,15 @@ function App() {
                         )}
                       </>
                     ) : (
-                      `YouTube URL: ${youtubeUrl}`
+                      <>
+                        YouTube URL{youtubeUrls.length > 1 ? "s" : ""}: {youtubeUrls.join(", ")}
+                        {youtubeSegment && (
+                          <span className="ml-2 text-blue-600">
+                            (Segment: {youtubeSegment.startTime.toFixed(1)}s -{" "}
+                            {youtubeSegment.endTime.toFixed(1)}s)
+                          </span>
+                        )}
+                      </>
                     )}
                   </p>
                 </div>
@@ -263,10 +298,7 @@ function App() {
               <div className="mt-8 flex justify-end">
                 <button
                   onClick={() => setStep(2)}
-                  disabled={
-                    (!file && !youtubeUrl) ||
-                    (longVideo && !selectedSegment) // Prevent proceeding if long video and no segment selected
-                  }
+                  disabled={!file && !youtubeUrls.length === 0}
                   className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                 >
                   Next Step →
@@ -278,18 +310,19 @@ function App() {
           {showSegmentSelector && (
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-900">
-                Select Video Segment (2-15 seconds)
+                Select Video Segment
               </h2>
               {processingSegment ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
-                    <div className="animate-spin mx-auto h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
+                    <div className="segment-processing mx-auto h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
                     <p className="text-gray-600">Processing video segment...</p>
                   </div>
                 </div>
               ) : (
                 <VideoSegmentSelector
                   file={longVideo?.file}
+                  youtubeUrl={longVideo?.youtubeUrl}
                   onSegmentSelect={handleSegmentSelect}
                   onCancel={handleSegmentCancel}
                 />
