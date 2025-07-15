@@ -43,16 +43,35 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, lon
     }
   };
 
+  // Helper: create a preview URL for the uploaded file
+  const videoUrl = file ? URL.createObjectURL(file) : null;
+
+  // Determine context-aware warning message
+  const warningMsg = file
+    ? "Long video detected! Enter the segment you want to use (2-15 seconds)."
+    : "Long YouTube video detected! Enter the segment you want to use (2-15 seconds).";
+
   return (
     <div className="space-y-6 animate-slide-up">
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <div className="flex items-center space-x-2">
           <span className="text-yellow-600">⚠️</span>
           <p className="text-yellow-700 text-sm">
-            <strong>Long YouTube video detected!</strong> Enter the segment you want to use (2-15 seconds).
+            <strong>{warningMsg}</strong>
           </p>
         </div>
       </div>
+
+      {/* Video preview for MP4 uploads */}
+      {file && (
+        <div className="flex justify-center">
+          <video
+            src={videoUrl}
+            controls
+            style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 12, boxShadow: "0 2px 8px #0001" }}
+          />
+        </div>
+      )}
 
       <div className="flex space-x-4">
         <div>

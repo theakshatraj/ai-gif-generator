@@ -8,8 +8,9 @@ function extractSingleVideoUrl(url) {
   try {
     // Accepts: https://www.youtube.com/watch?v=VIDEOID&list=... or ...&index=...
     //           https://youtu.be/VIDEOID
-    //           https://www.youtube.com/shorts/VIDEOID
-    const ytRegex = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/;
+    //           (NO LONGER: https://www.youtube.com/shorts/VIDEOID)
+    // Only allow standard video URLs
+    const ytRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/;
     const match = url.match(ytRegex);
     if (match && match[1]) {
       return `https://www.youtube.com/watch?v=${match[1]}`;
@@ -98,12 +99,17 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
     setUrlError("");
     const url = youtubeInput.trim();
     if (!url) {
-      setUrlError("Please enter a YouTube video or Shorts URL.");
+      setUrlError("Please enter a YouTube video URL.");
+      return;
+    }
+    // Block Shorts URLs explicitly
+    if (/youtube\.com\/shorts\//.test(url)) {
+      setUrlError("YouTube Shorts are not supported. Please enter a standard YouTube video URL.");
       return;
     }
     const normalized = extractSingleVideoUrl(url);
     if (!normalized) {
-      setUrlError("Invalid YouTube video or Shorts URL. Please enter a valid link.");
+      setUrlError("Invalid YouTube video URL. Please enter a valid link.");
       return;
     }
     setCheckingDuration(true);
@@ -125,13 +131,13 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
     <div className="space-y-6 animate-slide-up">
       {/* YouTube URL Input */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Video or Shorts URL</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Video URL</label>
         <div className="flex gap-2">
           <input
             type="url"
             value={youtubeInput}
             onChange={(e) => setYoutubeInput(e.target.value)}
-            placeholder="Paste a YouTube video or Shorts URL here..."
+            placeholder="Paste a YouTube video URL here..."
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
             disabled={checkingDuration}
           />
