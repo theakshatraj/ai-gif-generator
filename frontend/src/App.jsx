@@ -123,7 +123,7 @@ function App() {
         formData.append("video", file);
 
         // Add segment information if available
-        if (file.isSegmented) {
+        if (selectedSegment) {
           formData.append("segmentStart", file.segmentStart.toString());
           formData.append("segmentEnd", file.segmentEnd.toString());
           formData.append("isSegmented", "true");
