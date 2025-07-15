@@ -9,13 +9,6 @@ class VideoTrimmer {
     try {
       console.log(`✂️ Trimming video: ${startTime}s to ${endTime}s`)
 
-      // Ensure segment doesn't exceed 15 seconds
-      const segmentDuration = endTime - startTime
-      if (segmentDuration > 15) {
-        console.warn(`⚠️ Segment duration (${segmentDuration}s) exceeds 15s limit, adjusting...`)
-        endTime = startTime + 15
-      }
-
       // For now, we'll create a trimmed blob using MediaRecorder
       // This is a simplified approach - in production you might want to use FFmpeg.wasm
       const video = document.createElement("video")
@@ -96,39 +89,6 @@ class VideoTrimmer {
     }
   }
 
-  // Enhanced method: Create actual trimmed video segment
-  async createTrimmedSegment(file, startTime, endTime) {
-    try {
-      console.log(`🎬 Creating trimmed segment: ${startTime}s - ${endTime}s`)
-      
-      // Validate segment duration
-      const segmentDuration = endTime - startTime
-      if (segmentDuration < 2) {
-        throw new Error("Segment must be at least 2 seconds long")
-      }
-      
-      if (segmentDuration > 15) {
-        console.warn(`⚠️ Segment duration (${segmentDuration}s) exceeds 15s limit, adjusting to 15s`)
-        endTime = startTime + 15
-      }
-
-      // Actually trim the video
-      const trimmedFile = await this.trimVideo(file, startTime, endTime)
-      
-      // Add metadata to the trimmed file
-      trimmedFile.segmentStart = startTime
-      trimmedFile.segmentEnd = endTime
-      trimmedFile.isSegmented = true
-      trimmedFile.originalDuration = endTime - startTime
-
-      console.log(`✅ Successfully created trimmed segment: ${trimmedFile.name} (${trimmedFile.size} bytes)`)
-      return trimmedFile
-    } catch (error) {
-      console.error("❌ Failed to create trimmed segment:", error)
-      throw error
-    }
-  }
-
   // Alternative method: Create a simple segment metadata instead of actual trimming
   createSegmentMetadata(file, startTime, endTime) {
     // Create a new File object with segment metadata
@@ -140,25 +100,6 @@ class VideoTrimmer {
     segmentFile.isSegmented = true
 
     return segmentFile
-  }
-
-  // Validate segment parameters
-  validateSegment(startTime, endTime, totalDuration) {
-    const segmentDuration = endTime - startTime
-    
-    if (startTime < 0 || endTime > totalDuration) {
-      return { valid: false, error: "Segment times are out of range" }
-    }
-    
-    if (segmentDuration < 2) {
-      return { valid: false, error: "Segment must be at least 2 seconds long" }
-    }
-    
-    if (segmentDuration > 15) {
-      return { valid: false, error: "Segment cannot exceed 15 seconds" }
-    }
-    
-    return { valid: true }
   }
 }
 

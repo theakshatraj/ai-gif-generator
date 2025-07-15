@@ -1,24 +1,15 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import ReactPlayer from "react-player";
 
-const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) => {
+const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
   const videoRef = useRef(null)
-  const playerRef = useRef(null)
   const [duration, setDuration] = useState(0)
   const [startTime, setStartTime] = useState(0)
-  const [endTime, setEndTime] = useState(15) // Changed from 30 to 15 seconds max
+  const [endTime, setEndTime] = useState(30)
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
-  const [playerReady, setPlayerReady] = useState(false)
-  const [playerError, setPlayerError] = useState(false)
-
-  // Use a callback ref for ReactPlayer
-  const setPlayerRef = (player) => {
-    playerRef.current = player;
-  };
 
   useEffect(() => {
     if (file) {
@@ -28,55 +19,27 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
     }
   }, [file])
 
-  // For regular video files
   const handleLoadedMetadata = () => {
     const videoDuration = videoRef.current.duration
     setDuration(videoDuration)
-    setEndTime(Math.min(15, videoDuration)) // Max 15 seconds or video duration
+    setEndTime(Math.min(30, videoDuration)) // Max 30 seconds or video duration
   }
 
   const handleTimeUpdate = () => {
     setCurrentTime(videoRef.current.currentTime)
   }
 
-  // For ReactPlayer (YouTube)
-  const handlePlayerDuration = (duration) => {
-    setDuration(duration)
-    setEndTime(Math.min(15, duration)) // Max 15 seconds or video duration
-  }
-
-  const handlePlayerProgress = (state) => {
-    setCurrentTime(state.playedSeconds)
-    if (state.playedSeconds >= endTime && isPlaying) {
-      setIsPlaying(false)
-    }
-  }
-
-  const handlePlayerSeek = (time) => {
-    setCurrentTime(time)
-  }
-
   const handlePlayPause = () => {
-    if (youtubeUrl) {
-      setIsPlaying(!isPlaying)
+    if (isPlaying) {
+      videoRef.current.pause()
     } else {
-      if (isPlaying) {
-        videoRef.current.pause()
-      } else {
-        videoRef.current.play()
-      }
-      setIsPlaying(!isPlaying)
+      videoRef.current.play()
     }
+    setIsPlaying(!isPlaying)
   }
 
   const handleSeek = (time) => {
-    if (youtubeUrl) {
-      if (playerRef.current) {
-        playerRef.current.seekTo(time)
-      }
-    } else {
-      videoRef.current.currentTime = time
-    }
+    videoRef.current.currentTime = time
     setCurrentTime(time)
   }
 
@@ -89,9 +52,9 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
       setEndTime(Math.min(newStartTime + 2, duration))
     }
 
-    // Ensure segment doesn't exceed 15 seconds
-    if (endTime - newStartTime > 15) {
-      setEndTime(newStartTime + 15)
+    // Ensure segment doesn't exceed 30 seconds
+    if (endTime - newStartTime > 30) {
+      setEndTime(newStartTime + 30)
     }
   }
 
@@ -104,9 +67,9 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
       setStartTime(Math.max(newEndTime - 2, 0))
     }
 
-    // Ensure segment doesn't exceed 15 seconds
-    if (newEndTime - startTime > 15) {
-      setStartTime(newEndTime - 15)
+    // Ensure segment doesn't exceed 30 seconds
+    if (newEndTime - startTime > 30) {
+      setStartTime(newEndTime - 30)
     }
   }
 
@@ -129,29 +92,15 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
   }
 
   const previewSegment = () => {
-    if (youtubeUrl) {
-      if (playerRef.current && typeof playerRef.current.seekTo === "function") {
-        playerRef.current.seekTo(startTime)
-        setIsPlaying(true)
-      } else {
-        console.warn("ReactPlayer instance not ready or seekTo not available.");
-      }
-    } else {
-      videoRef.current.currentTime = startTime
-      videoRef.current.play()
-      setIsPlaying(true)
-    }
+    videoRef.current.currentTime = startTime
+    videoRef.current.play()
+    setIsPlaying(true)
 
     // Stop at end time
     const checkTime = () => {
-      const current = youtubeUrl ? currentTime : videoRef.current?.currentTime || 0
-      if (current >= endTime) {
-        if (youtubeUrl) {
-          setIsPlaying(false)
-        } else {
-          videoRef.current.pause()
-          setIsPlaying(false)
-        }
+      if (videoRef.current.currentTime >= endTime) {
+        videoRef.current.pause()
+        setIsPlaying(false)
       } else {
         requestAnimationFrame(checkTime)
       }
@@ -159,7 +108,7 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
     checkTime()
   }
 
-  if (!videoUrl && !youtubeUrl) return null
+  if (!videoUrl) return null
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -167,46 +116,22 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
         <div className="flex items-center space-x-2">
           <span className="text-yellow-600">⚠️</span>
           <p className="text-yellow-700 text-sm">
-            <strong>Long video detected!</strong> Please select a segment (2-15 seconds) to create your GIF.
+            <strong>Long video detected!</strong> Please select a segment (2-30 seconds) to create your GIF.
           </p>
         </div>
       </div>
 
       {/* Video Player */}
       <div className="relative bg-black rounded-lg overflow-hidden">
-        {youtubeUrl ? (
-          <>
-            <ReactPlayer
-              ref={setPlayerRef}
-              url={youtubeUrl}
-              controls={false}
-              playing={isPlaying}
-              onDuration={setDuration}
-              onProgress={handlePlayerProgress}
-              onSeek={handlePlayerSeek}
-              width="100%"
-              height="256px"
-              progressInterval={100}
-              onReady={() => { setPlayerReady(true); setPlayerError(false); }}
-              onError={() => { setPlayerError(true); setPlayerReady(false); }}
-            />
-            {playerError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-80">
-                <span className="text-red-500 font-bold">Failed to load YouTube video. Please check the URL or try another video.</span>
-              </div>
-            )}
-          </>
-        ) : (
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            className="w-full h-64 object-contain"
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-          />
-        )}
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="w-full h-64 object-contain"
+          onLoadedMetadata={handleLoadedMetadata}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
 
         {/* Play/Pause Overlay */}
         <div className="absolute inset-0 flex items-center justify-center">
@@ -245,12 +170,12 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
             step="0.1"
             value={currentTime}
             onChange={(e) => handleSeek(Number.parseFloat(e.target.value))}
-            className="video-timeline"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
 
           {/* Segment Indicators */}
           <div
-            className="segment-indicator"
+            className="absolute top-0 h-2 bg-blue-500 rounded-lg pointer-events-none"
             style={{
               left: `${(startTime / duration) * 100}%`,
               width: `${((endTime - startTime) / duration) * 100}%`,
@@ -274,7 +199,7 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
             step="0.1"
             value={startTime}
             onChange={(e) => handleStartTimeChange(e.target.value)}
-            className="video-timeline"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
         </div>
 
@@ -287,7 +212,7 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
             step="0.1"
             value={endTime}
             onChange={(e) => handleEndTimeChange(e.target.value)}
-            className="video-timeline"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
         </div>
       </div>
@@ -309,8 +234,8 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
           </div>
         </div>
 
-        {getSegmentDuration() > 15 && (
-          <div className="mt-2 text-red-600 text-sm">⚠️ Segment too long! Maximum 15 seconds allowed.</div>
+        {getSegmentDuration() > 30 && (
+          <div className="mt-2 text-red-600 text-sm">⚠️ Segment too long! Maximum 30 seconds allowed.</div>
         )}
 
         {getSegmentDuration() < 2 && (
@@ -336,7 +261,7 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
 
         <button
           onClick={handleConfirmSegment}
-          disabled={getSegmentDuration() < 2 || getSegmentDuration() > 15}
+          disabled={getSegmentDuration() < 2 || getSegmentDuration() > 30}
           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
         >
           Use This Segment
