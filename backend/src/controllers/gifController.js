@@ -62,55 +62,41 @@ export const generateGifs = async (req, res) => {
     let isVideoDownloadSuccessful = false // New flag to track video download success
 
     if (youtubeUrl) {
-      console.log("📥 Processing YouTube URL...")
+      console.log("📥 Processing YouTube URL...");
       try {
         // Use the modified videoService.getYouTubeData which now attempts download
-        const youtubeData = await videoService.getYouTubeData(youtubeUrl)
-        videoPath = youtubeData.videoPath
-        videoInfo = youtubeData.videoInfo
-        transcript = youtubeData.transcript
-        isVideoDownloadSuccessful = youtubeData.isDownloadSuccessful // Get the flag
+        let segmentStart = null;
+        let segmentEnd = null;
+        if (youtubeUrl && req.body.isSegmented === "true") {
+          segmentStart = Number.parseFloat(req.body.segmentStart);
+          segmentEnd = Number.parseFloat(req.body.segmentEnd);
+        }
+        const youtubeData = await videoService.getYouTubeData(youtubeUrl, segmentStart, segmentEnd);
+        videoPath = youtubeData.videoPath;
+        videoInfo = youtubeData.videoInfo;
+        transcript = youtubeData.transcript;
+        isVideoDownloadSuccessful = youtubeData.isDownloadSuccessful;
 
         if (videoPath) {
-          tempFiles.push(videoPath) // Add the downloaded video path to tempFiles for cleanup
+          tempFiles.push(videoPath); // Add the downloaded video path to tempFiles for cleanup
         }
-        console.log("✅ YouTube data processed successfully")
-        console.log(`📹 Video duration: ${videoInfo.duration}s`)
-        console.log(`🎬 Video title: ${videoInfo.title}`)
-        console.log(`📝 Transcript preview: ${transcript.text.substring(0, 200)}...`)
+        console.log("✅ YouTube data processed successfully");
+        console.log(`📹 Video duration: ${videoInfo.duration}s`);
+        console.log(`🎬 Video title: ${videoInfo.title}`);
+        console.log(`📝 Transcript preview: ${transcript.text.substring(0, 200)}...`);
 
         if (!isVideoDownloadSuccessful) {
-          console.warn("⚠️ YouTube video could not be downloaded. Will attempt to generate text-only GIFs.")
+          console.warn("⚠️ YouTube video could not be downloaded. Will attempt to generate text-only GIFs.");
         }
 
-        // Handle YouTube URL segmentation
-        if (youtubeUrl && req.body.isSegmented === "true") {
-          const segmentStart = Number.parseFloat(req.body.segmentStart);
-          const segmentEnd = Number.parseFloat(req.body.segmentEnd);
-          if (!isNaN(segmentStart) && !isNaN(segmentEnd) && isVideoDownloadSuccessful) {
-            console.log(`✂️ Processing YouTube segment: ${segmentStart}s - ${segmentEnd}s`)
-            // Trim the video to the selected segment
-            const trimmedPath = await videoService.createClip(videoPath, segmentStart, segmentEnd - segmentStart);
-            tempFiles.push(trimmedPath);
-            // Use the trimmed video for further processing
-            videoPath = trimmedPath;
-            // Update videoInfo to reflect the segment
-            videoInfo.originalDuration = videoInfo.duration;
-            videoInfo.duration = segmentEnd - segmentStart;
-            videoInfo.isSegmented = true;
-            videoInfo.segmentStart = segmentStart;
-            videoInfo.segmentEnd = segmentEnd;
-          } else if (!isNaN(segmentStart) && !isNaN(segmentEnd) && !isVideoDownloadSuccessful) {
-            console.log(`✂️ Processing YouTube segment metadata: ${segmentStart}s - ${segmentEnd}s (video not downloaded)`)
-            // Update videoInfo to reflect the segment even if video wasn't downloaded
-            videoInfo.originalDuration = videoInfo.duration;
-            videoInfo.duration = segmentEnd - segmentStart;
-            videoInfo.isSegmented = true;
-            videoInfo.segmentStart = segmentStart;
-            videoInfo.segmentEnd = segmentEnd;
-          }
+        // Update videoInfo to reflect the segment if segmented
+        if (segmentStart !== null && segmentEnd !== null) {
+          videoInfo.originalDuration = videoInfo.duration;
+          videoInfo.duration = segmentEnd - segmentStart;
+          videoInfo.isSegmented = true;
+          videoInfo.segmentStart = segmentStart;
+          videoInfo.segmentEnd = segmentEnd;
         }
-
       } catch (youtubeError) {
         console.error("❌ YouTube processing failed:", youtubeError)
         await cleanupTempFiles(tempFiles)

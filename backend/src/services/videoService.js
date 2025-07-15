@@ -324,26 +324,71 @@ class VideoService {
     }
   }
 
-  async downloadYouTubeVideo(youtubeUrl) {
+  // Download a segment of a YouTube video using yt-dlp --download-sections
+  async downloadYouTubeSegmentWithYtDlp(youtubeUrl, segmentStart, segmentEnd) {
+    const videoId = youtubeService.extractVideoId(youtubeUrl);
+    const outputPath = path.join(this.tempDir, `${videoId}_segment.%(ext)s`);
+    let cookieFilePath = null;
+    try {
+      cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES);
+      const section = `*${segmentStart}-${segmentEnd}`;
+      const baseArgs = [
+        '--no-warnings',
+        '--no-check-certificate',
+        '--geo-bypass',
+        '--socket-timeout', '30',
+        '--retries', '3',
+        '--fragment-retries', '3',
+        '--output', outputPath,
+        '--download-sections', section,
+      ];
+      if (cookieFilePath) {
+        baseArgs.push('--cookies', cookieFilePath);
+      }
+      baseArgs.push(youtubeUrl);
+      const { stdout, stderr } = await execFileAsync('yt-dlp', baseArgs, { timeout: 300000 });
+      const files = fs.readdirSync(this.tempDir).filter(
+        (file) => file.startsWith(videoId) && (file.endsWith('.mp4') || file.endsWith('.webm') || file.endsWith('.mkv'))
+      );
+      if (files.length > 0) {
+        const downloadedFile = path.join(this.tempDir, files[0]);
+        if (fs.existsSync(downloadedFile) && fs.statSync(downloadedFile).size > 0) {
+          console.log(`✅ Downloaded segment with yt-dlp: ${downloadedFile}`);
+          return downloadedFile;
+        }
+      }
+      throw new Error('yt-dlp segment download failed or produced no file');
+    } finally {
+      await deleteCookieFile(cookieFilePath);
+    }
+  }
+
+  async downloadYouTubeVideo(youtubeUrl, segmentStart = null, segmentEnd = null) {
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     if (!videoId) {
-      throw new Error("Invalid YouTube URL for download")
+      throw new Error('Invalid YouTube URL for download')
     }
-
+    // If segment is specified, try segment download first
+    if (segmentStart !== null && segmentEnd !== null) {
+      try {
+        return await this.downloadYouTubeSegmentWithYtDlp(youtubeUrl, segmentStart, segmentEnd)
+      } catch (err) {
+        console.warn('⚠️ yt-dlp segment download failed, falling back to full video download:', err.message)
+        // Fallback to full video download below
+      }
+    }
     const downloadMethods = [
-      { name: "yt-dlp-enhanced", method: () => this.downloadWithYtDlpEnhanced(youtubeUrl) },
-      { name: "ytdl-core", method: () => this.downloadWithYtdlCore(youtubeUrl) },
-      { name: "youtube-dl", method: () => this.downloadWithYoutubeDlExec(youtubeUrl) },
-      { name: "gallery-dl", method: () => this.downloadWithGalleryDl(youtubeUrl) },
-      { name: "streamlink", method: () => this.downloadWithStreamlink(youtubeUrl) },
-      // { name: "proxy", method: () => this.downloadWithProxy(youtubeUrl) },
+      { name: 'yt-dlp-enhanced', method: () => this.downloadWithYtDlpEnhanced(youtubeUrl) },
+      { name: 'ytdl-core', method: () => this.downloadWithYtdlCore(youtubeUrl) },
+      { name: 'youtube-dl', method: () => this.downloadWithYoutubeDlExec(youtubeUrl) },
+      { name: 'gallery-dl', method: () => this.downloadWithGalleryDl(youtubeUrl) },
+      { name: 'streamlink', method: () => this.downloadWithStreamlink(youtubeUrl) },
+      // { name: 'proxy', method: () => this.downloadWithProxy(youtubeUrl) },
     ]
-
     for (const downloadMethod of downloadMethods) {
       try {
         console.log(`🔄 Trying download method: ${downloadMethod.name}`)
         const result = await downloadMethod.method()
-
         if (result && fs.existsSync(result) && fs.statSync(result).size > 0) {
           console.log(`✅ Successfully downloaded with ${downloadMethod.name}: ${result}`)
           return result
@@ -354,7 +399,7 @@ class VideoService {
         continue
       }
     }
-    throw new Error("All download methods failed. The video may be restricted, private, or unavailable.")
+    throw new Error('All download methods failed. The video may be restricted, private, or unavailable.')
   }
 
   async downloadWithYtdlCore(youtubeUrl) {
@@ -494,22 +539,22 @@ class VideoService {
     }
   }
 
-  async getYouTubeData(youtubeUrl) {
-    console.log("🔍 Getting YouTube data...")
-    let videoPath = null
-    let videoInfo = null
-    let transcript = null
-    let isDownloadSuccessful = false
+  async getYouTubeData(youtubeUrl, segmentStart = null, segmentEnd = null) {
+    console.log("🔍 Getting YouTube data...");
+    let videoPath = null;
+    let videoInfo = null;
+    let transcript = null;
+    let isDownloadSuccessful = false;
 
-    const accessibilityResult = await this.checkVideoAccessibility(youtubeUrl)
+    const accessibilityResult = await this.checkVideoAccessibility(youtubeUrl);
 
     try {
-      console.log("📊 Fetching YouTube metadata...")
-      videoInfo = await youtubeService.getVideoMetadata(youtubeUrl)
-      console.log("✅ YouTube metadata obtained.")
+      console.log("📊 Fetching YouTube metadata...");
+      videoInfo = await youtubeService.getVideoMetadata(youtubeUrl);
+      console.log("✅ YouTube metadata obtained.");
     } catch (metaError) {
-      console.warn(`⚠️ Failed to get YouTube metadata: ${metaError.message}`)
-      const videoId = youtubeService.extractVideoId(youtubeUrl)
+      console.warn(`⚠️ Failed to get YouTube metadata: ${metaError.message}`);
+      const videoId = youtubeService.extractVideoId(youtubeUrl);
       videoInfo = {
         title: accessibilityResult.title || (videoId ? `YouTube Video (${videoId})` : "Unknown YouTube Video"),
         duration: accessibilityResult.duration || 300,
@@ -519,59 +564,64 @@ class VideoService {
         publishedAt: new Date().toISOString(),
         width: 640,
         height: 360,
-      }
+      };
     }
 
     try {
-      console.log("📝 Fetching YouTube transcript...")
-      transcript = await youtubeService.getVideoTranscript(youtubeUrl)
-      console.log("✅ YouTube captions extracted successfully.")
+      console.log("📝 Fetching YouTube transcript...");
+      transcript = await youtubeService.getVideoTranscript(youtubeUrl);
+      console.log("✅ YouTube captions extracted successfully.");
     } catch (captionError) {
-      console.warn(`⚠️ Failed to get captions: ${captionError.message}`)
+      console.warn(`⚠️ Failed to get captions: ${captionError.message}`);
       transcript = {
         text: `Video: ${videoInfo.title}. ${videoInfo.description ? videoInfo.description.substring(0, 500) : "No description available."}`,
         segments: [],
-      }
+      };
     }
 
     if (accessibilityResult.accessible || transcript.text) {
       try {
-        console.log("📥 Attempting to download YouTube video...")
-        videoPath = await this.downloadYouTubeVideo(youtubeUrl)
-        console.log("✅ YouTube video downloaded successfully.")
-        isDownloadSuccessful = true
+        console.log("📥 Attempting to download YouTube video...");
+        // Pass segmentStart and segmentEnd if provided
+        videoPath = await this.downloadYouTubeVideo(
+          youtubeUrl,
+          segmentStart,
+          segmentEnd
+        );
+        console.log("✅ YouTube video downloaded successfully.");
+        isDownloadSuccessful = true;
 
         try {
-          const actualVideoInfo = await this.getVideoInfo(videoPath)
-          videoInfo = { ...videoInfo, ...actualVideoInfo }
+          const actualVideoInfo = await this.getVideoInfo(videoPath);
+          videoInfo = { ...videoInfo, ...actualVideoInfo };
         } catch (infoError) {
-          console.warn("⚠️ Could not get video info from downloaded file:", infoError.message)
+          console.warn("⚠️ Could not get video info from downloaded file:", infoError.message);
         }
       } catch (downloadError) {
-        console.error(`❌ Failed to download YouTube video after all attempts: ${downloadError.message}`)
-        isDownloadSuccessful = false
-        videoPath = null
+        console.error(`❌ Failed to download YouTube video after all attempts: ${downloadError.message}`);
+        isDownloadSuccessful = false;
+        videoPath = null;
       }
     } else {
-      console.warn("⚠️ Skipping download - no accessible content or metadata found.")
+      console.warn("⚠️ Skipping download - no accessible content or metadata found.");
     }
 
     if (!transcript.text && !isDownloadSuccessful) {
       throw new Error(
         "Unable to obtain video content or metadata. The video may be private, restricted, or unavailable.",
-      )
+      );
     }
 
-    console.log(`DEBUG: videoPath = ${videoPath}`)
-    console.log(`DEBUG: isDownloadSuccessful = ${isDownloadSuccessful}`)
-    console.log(`DEBUG: transcript length = ${transcript.text ? transcript.text.length : 0}`)
+    console.log(`DEBUG: videoPath = ${videoPath}`);
+    console.log(`DEBUG: isDownloadSuccessful = ${isDownloadSuccessful}`);
+    console.log(`DEBUG: transcript length = ${transcript.text ? transcript.text.length : 0}`);
 
     return {
       videoPath,
       videoInfo,
       transcript,
       isDownloadSuccessful,
-    }
+    };
   }
 
   extractVideoId(url) {

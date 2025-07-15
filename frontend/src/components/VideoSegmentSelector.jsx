@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import ReactPlayer from "react-player";
+import YouTube from "react-youtube";
 
 const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, duration: propDuration }) => {
   const videoRef = useRef(null)
@@ -40,46 +41,75 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, dur
     setCurrentTime(videoRef.current.currentTime)
   }
 
-  // For ReactPlayer (YouTube)
-  const handlePlayerDuration = (duration) => {
-    setDuration(duration)
-    setEndTime(Math.min(15, duration)) // Max 15 seconds or video duration
-  }
+  // For YouTube IFrame API
+  const youtubePlayerRef = useRef(null);
+  const [ytReady, setYtReady] = useState(false);
 
-  const handlePlayerProgress = (state) => {
-    setCurrentTime(state.playedSeconds)
-    if (state.playedSeconds >= endTime && isPlaying) {
-      setIsPlaying(false)
+  const handleYouTubeReady = (event) => {
+    youtubePlayerRef.current = event.target;
+    setYtReady(true);
+    // Get duration from player if not set
+    const ytDuration = event.target.getDuration();
+    if (ytDuration && ytDuration > 0) {
+      setDuration(ytDuration);
+      setEndTime(Math.min(15, ytDuration));
     }
-  }
+  };
 
-  const handlePlayerSeek = (time) => {
-    setCurrentTime(time)
-  }
+  const handleYouTubeStateChange = (event) => {
+    // 1 = playing, 2 = paused
+    if (event.data === 1) setIsPlaying(true);
+    if (event.data === 2) setIsPlaying(false);
+  };
+
+  // Poll current time for YouTube
+  useEffect(() => {
+    let raf;
+    if (youtubeUrl && ytReady && youtubePlayerRef.current) {
+      const updateTime = () => {
+        const t = youtubePlayerRef.current.getCurrentTime();
+        setCurrentTime(t);
+        if (isPlaying && t >= endTime) {
+          youtubePlayerRef.current.pauseVideo();
+          setIsPlaying(false);
+        } else if (isPlaying) {
+          raf = requestAnimationFrame(updateTime);
+        }
+      };
+      if (isPlaying) raf = requestAnimationFrame(updateTime);
+    }
+    return () => raf && cancelAnimationFrame(raf);
+  }, [isPlaying, youtubeUrl, ytReady, endTime]);
 
   const handlePlayPause = () => {
     if (youtubeUrl) {
-      setIsPlaying(!isPlaying)
+      if (!ytReady || !youtubePlayerRef.current) return;
+      if (isPlaying) {
+        youtubePlayerRef.current.pauseVideo();
+      } else {
+        youtubePlayerRef.current.playVideo();
+      }
+      setIsPlaying(!isPlaying);
     } else {
       if (isPlaying) {
-        videoRef.current.pause()
+        videoRef.current.pause();
       } else {
-        videoRef.current.play()
+        videoRef.current.play();
       }
-      setIsPlaying(!isPlaying)
+      setIsPlaying(!isPlaying);
     }
-  }
+  };
 
   const handleSeek = (time) => {
     if (youtubeUrl) {
-      if (playerRef.current) {
-        playerRef.current.seekTo(time)
+      if (ytReady && youtubePlayerRef.current) {
+        youtubePlayerRef.current.seekTo(time, true);
       }
     } else {
-      videoRef.current.currentTime = time
+      videoRef.current.currentTime = time;
     }
-    setCurrentTime(time)
-  }
+    setCurrentTime(time);
+  };
 
   const handleStartTimeChange = (value) => {
     const newStartTime = Number.parseFloat(value)
@@ -131,31 +161,17 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, dur
 
   const previewSegment = () => {
     if (youtubeUrl) {
-      if (playerRef.current) {
-        playerRef.current.seekTo(startTime)
-        setIsPlaying(true)
+      if (ytReady && youtubePlayerRef.current) {
+        youtubePlayerRef.current.seekTo(startTime, true);
+        youtubePlayerRef.current.playVideo();
+        setIsPlaying(true);
       }
     } else {
-      videoRef.current.currentTime = startTime
-      videoRef.current.play()
-      setIsPlaying(true)
+      videoRef.current.currentTime = startTime;
+      videoRef.current.play();
+      setIsPlaying(true);
     }
-
-    // Stop at end time
-    const checkTime = () => {
-      const current = youtubeUrl ? currentTime : videoRef.current?.currentTime || 0
-      if (current >= endTime) {
-        if (youtubeUrl) {
-          setIsPlaying(false)
-        } else {
-          videoRef.current.pause()
-          setIsPlaying(false)
-        }
-      } else {
-        requestAnimationFrame(checkTime)
-      }
-    }
-    checkTime()
+    // Stop at end time handled by polling effect
   }
 
   if (!videoUrl && !youtubeUrl) return null
@@ -174,17 +190,22 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, dur
       {/* Video Player */}
       <div className="relative bg-black rounded-lg overflow-hidden">
         {youtubeUrl ? (
-          <ReactPlayer
-            ref={setPlayerRef}
-            url={youtubeUrl}
-            controls={false}
-            playing={isPlaying}
-            onDuration={handlePlayerDuration}
-            onProgress={handlePlayerProgress}
-            onSeek={handlePlayerSeek}
-            width="100%"
-            height="256px"
-            progressInterval={100}
+          <YouTube
+            videoId={youtubeUrl.includes("youtube.com") || youtubeUrl.includes("youtu.be") ? youtubeUrl.split("v=")[1]?.split("&")[0] || youtubeUrl.split("youtu.be/")[1]?.split("?")[0] : youtubeUrl}
+            opts={{
+              width: "100%",
+              height: "256",
+              playerVars: {
+                controls: 0,
+                modestbranding: 1,
+                rel: 0,
+                fs: 0,
+                iv_load_policy: 3,
+                disablekb: 1,
+              },
+            }}
+            onReady={handleYouTubeReady}
+            onStateChange={handleYouTubeStateChange}
           />
         ) : (
           <video
