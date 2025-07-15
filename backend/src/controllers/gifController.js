@@ -24,6 +24,7 @@ async function cleanupTempFiles(files) {
 export const generateGifs = async (req, res) => {
   const startTime = Date.now();
   const tempFiles = [];
+  let videoPath, videoInfo, transcript, isVideoDownloadSuccessful;
   try {
     console.log("🚀 Starting GIF generation process...");
     const { prompt, youtubeUrl, youtubeUrls } = req.body;
