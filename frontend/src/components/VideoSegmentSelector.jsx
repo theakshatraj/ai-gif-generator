@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const parseTime = (input) => {
   if (typeof input === "number") return input;
@@ -51,6 +51,43 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, lon
     ? "Long video detected! Enter the segment you want to use (2-15 seconds)."
     : "Long YouTube video detected! Enter the segment you want to use (2-15 seconds).";
 
+  // Video ref for segment preview
+  const videoRef = useRef(null);
+
+  // Handle segment preview
+  const handlePreviewSegment = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = startTime;
+      videoRef.current.play();
+      // Remove any previous listeners
+      videoRef.current.onended = null;
+      videoRef.current.ontimeupdate = null;
+      // Pause at endTime
+      videoRef.current.ontimeupdate = () => {
+        if (videoRef.current.currentTime >= endTime) {
+          videoRef.current.pause();
+          videoRef.current.ontimeupdate = null;
+        }
+      };
+    }
+  };
+
+  // Keep sliders and text inputs in sync
+  const handleStartSlider = (val) => {
+    setStartTimeInput(val);
+    // If endTime is less than start+2, bump endTime
+    if (parseFloat(endTimeInput) < parseFloat(val) + 2) {
+      setEndTimeInput((parseFloat(val) + 2).toString());
+    }
+  };
+  const handleEndSlider = (val) => {
+    setEndTimeInput(val);
+    // If startTime is more than end-2, lower startTime
+    if (parseFloat(startTimeInput) > parseFloat(val) - 2) {
+      setStartTimeInput((parseFloat(val) - 2).toString());
+    }
+  };
+
   return (
     <div className="space-y-6 animate-slide-up">
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -64,12 +101,48 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, lon
 
       {/* Video preview for MP4 uploads */}
       {file && (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center space-y-4">
           <video
+            ref={videoRef}
             src={videoUrl}
             controls
             style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 12, boxShadow: "0 2px 8px #0001" }}
           />
+          {/* Range sliders for segment selection */}
+          <div className="flex flex-col items-center space-y-2 w-full">
+            <label className="w-full">
+              <span className="block text-xs text-gray-600">Start Time: {startTime}s</span>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(endTime - 2, 2)}
+                value={startTime}
+                onChange={e => handleStartSlider(e.target.value)}
+                step={0.1}
+                className="w-full"
+              />
+            </label>
+            <label className="w-full">
+              <span className="block text-xs text-gray-600">End Time: {endTime}s</span>
+              <input
+                type="range"
+                min={Math.min(parseFloat(startTime) + 2, duration - 2)}
+                max={duration}
+                value={endTime}
+                onChange={e => handleEndSlider(e.target.value)}
+                step={0.1}
+                className="w-full"
+              />
+            </label>
+            <button
+              type="button"
+              className="mt-2 px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              onClick={handlePreviewSegment}
+              disabled={segmentInvalid}
+            >
+              Preview Segment
+            </button>
+          </div>
         </div>
       )}
 
