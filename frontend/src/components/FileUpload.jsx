@@ -1,36 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import apiService from "../services/api";
-
-// Helper: Extract single video URL from any YouTube link (removes playlist, etc.)
-function extractSingleVideoUrl(url) {
-  try {
-    // Accepts: https://www.youtube.com/watch?v=VIDEOID&list=... or ...&index=...
-    //           https://youtu.be/VIDEOID
-    //           (NO LONGER: https://www.youtube.com/shorts/VIDEOID)
-    // Only allow standard video URLs
-    const ytRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/;
-    const match = url.match(ytRegex);
-    if (match && match[1]) {
-      return `https://www.youtube.com/watch?v=${match[1]}`;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// Helper: Validate if a string is a YouTube video/short URL
-function isValidYouTubeUrl(url) {
-  return !!extractSingleVideoUrl(url);
-}
 
 const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
-  const [youtubeInput, setYoutubeInput] = useState("");
-  const [dragActive, setDragActive] = useState(false);
-  const [checkingDuration, setCheckingDuration] = useState(false);
-  const [urlError, setUrlError] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("")
+  const [dragActive, setDragActive] = useState(false)
+  const [checkingDuration, setCheckingDuration] = useState(false)
 
   const checkVideoDuration = (file) => {
     return new Promise((resolve) => {
@@ -59,8 +34,8 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
       const duration = await checkVideoDuration(file)
       console.log(`📹 Video duration: ${duration} seconds`)
 
-      // If video is longer than 8 seconds, show segment selector
-      if (duration > 8) {
+      // If video is longer than 9 seconds, show segment selector
+      if (duration > 9) {
         onLongVideoDetected(file, duration)
       } else {
         onFileSelect(file)
@@ -94,65 +69,28 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
     }
   }
 
-  // Handle single YouTube URL (video or shorts, including playlist links)
-  const handleYouTubeSubmit = async () => {
-    setUrlError("");
-    const url = youtubeInput.trim();
-    if (!url) {
-      setUrlError("Please enter a YouTube video URL.");
-      return;
-    }
-    // Block Shorts URLs explicitly
-    if (/youtube\.com\/shorts\//.test(url)) {
-      setUrlError("YouTube Shorts are not supported. Please enter a standard YouTube video URL.");
-      return;
-    }
-    const normalized = extractSingleVideoUrl(url);
-    if (!normalized) {
-      setUrlError("Invalid YouTube video URL. Please enter a valid link.");
-      return;
-    }
-    setCheckingDuration(true);
-    try {
-      const meta = await apiService.getYoutubeMetadata(normalized);
-      if (meta.duration > 8) {
-        onLongVideoDetected({ youtubeUrl: normalized, duration: meta.duration });
-      } else {
-        onYouTubeUrl(normalized);
-      }
-    } catch (e) {
-      onYouTubeUrl(normalized); // fallback
-    } finally {
-      setCheckingDuration(false);
-    }
-  };
-
   return (
     <div className="space-y-6 animate-slide-up">
       {/* YouTube URL Input */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Video URL</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">YouTube URL</label>
         <div className="flex gap-2">
           <input
             type="url"
-            value={youtubeInput}
-            onChange={(e) => setYoutubeInput(e.target.value)}
-            placeholder="Paste a YouTube video URL here..."
+            value={youtubeUrl}
+            onChange={(e) => setYoutubeUrl(e.target.value)}
+            placeholder="https://youtube.com/watch?v=..."
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            disabled={checkingDuration}
           />
           <button
-            onClick={handleYouTubeSubmit}
-            disabled={!youtubeInput.trim() || checkingDuration}
+            onClick={() => onYouTubeUrl(youtubeUrl)}
+            disabled={!youtubeUrl.trim()}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
-            {checkingDuration ? "Checking..." : "Load"}
+            Load
           </button>
         </div>
-        {urlError && (
-          <div className="mt-2 text-red-600 text-xs whitespace-pre-line">{urlError}</div>
-        )}
-        <p className="text-xs text-gray-500 mt-1">Note: Long YouTube videos will also require segment selection</p>
+        <p className="text-xs text-gray-500 mt-1">Note: Long YouTube videos will also require segment selection (max 15 seconds)</p>
       </div>
 
       {/* OR Divider */}
@@ -210,7 +148,7 @@ const FileUpload = ({ onFileSelect, onYouTubeUrl, onLongVideoDetected }) => {
             <p className="text-xs text-gray-500">
               MP4 files only (max 100MB)
               <br />
-              Videos longer than 8 seconds will require segment selection
+              Videos longer than 9 seconds will require segment selection (max 15 seconds)
             </p>
           </div>
         </div>

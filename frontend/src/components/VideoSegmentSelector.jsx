@@ -1,92 +1,114 @@
 "use client"
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react"
 
-const parseTime = (input) => {
-  if (typeof input === "number") return input;
-  if (input.includes(":")) {
-    const [min, sec] = input.split(":").map(Number);
-    return min * 60 + sec;
+const VideoSegmentSelector = ({ file, onSegmentSelect, onCancel }) => {
+  const videoRef = useRef(null)
+  const [duration, setDuration] = useState(0)
+  const [startTime, setStartTime] = useState(0)
+  const [endTime, setEndTime] = useState(15)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [videoUrl, setVideoUrl] = useState(null)
+
+  useEffect(() => {
+    if (file) {
+      const url = URL.createObjectURL(file)
+      setVideoUrl(url)
+      return () => URL.revokeObjectURL(url)
+    }
+  }, [file])
+
+  const handleLoadedMetadata = () => {
+    const videoDuration = videoRef.current.duration
+    setDuration(videoDuration)
+    setEndTime(Math.min(15, videoDuration)) // Max 15 seconds or video duration
   }
-  return Number(input);
-};
 
-const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, longVideo }) => {
-  // If you have the video duration, pass it as a prop (e.g., longVideo?.duration)
-  const duration = longVideo?.duration || 300;
+  const handleTimeUpdate = () => {
+    setCurrentTime(videoRef.current.currentTime)
+  }
 
-  // Use string state for inputs to allow mm:ss or seconds
-  const [startTimeInput, setStartTimeInput] = useState("0");
-  const [endTimeInput, setEndTimeInput] = useState("15");
+  const handlePlayPause = () => {
+    if (isPlaying) {
+      videoRef.current.pause()
+    } else {
+      videoRef.current.play()
+    }
+    setIsPlaying(!isPlaying)
+  }
 
-  // Parse and validate
-  const startTime = parseTime(startTimeInput);
-  const endTime = parseTime(endTimeInput);
-  const segmentDuration = endTime - startTime;
+  const handleSeek = (time) => {
+    videoRef.current.currentTime = time
+    setCurrentTime(time)
+  }
 
-  const segmentInvalid =
-    isNaN(startTime) ||
-    isNaN(endTime) ||
-    startTime < 0 ||
-    endTime > duration ||
-    segmentDuration < 2 ||
-    segmentDuration > 15 ||
-    endTime <= startTime;
+  const handleStartTimeChange = (value) => {
+    const newStartTime = Number.parseFloat(value)
+    setStartTime(newStartTime)
+
+    // Ensure end time is at least 2 seconds after start time
+    if (endTime - newStartTime < 2) {
+      setEndTime(Math.min(newStartTime + 2, duration))
+    }
+
+    // Ensure segment doesn't exceed 15 seconds
+    if (endTime - newStartTime > 15) {
+      setEndTime(newStartTime + 15)
+    }
+  }
+
+  const handleEndTimeChange = (value) => {
+    const newEndTime = Number.parseFloat(value)
+    setEndTime(newEndTime)
+
+    // Ensure start time is at least 2 seconds before end time
+    if (newEndTime - startTime < 2) {
+      setStartTime(Math.max(newEndTime - 2, 0))
+    }
+
+    // Ensure segment doesn't exceed 15 seconds
+    if (newEndTime - startTime > 15) {
+      setStartTime(newEndTime - 15)
+    }
+  }
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const getSegmentDuration = () => {
+    return endTime - startTime
+  }
 
   const handleConfirmSegment = () => {
-    if (!segmentInvalid) {
-      onSegmentSelect({
-        startTime,
-        endTime,
-        duration: segmentDuration,
-      });
+    onSegmentSelect({
+      startTime,
+      endTime,
+      duration: getSegmentDuration(),
+    })
+  }
+
+  const previewSegment = () => {
+    videoRef.current.currentTime = startTime
+    videoRef.current.play()
+    setIsPlaying(true)
+
+    // Stop at end time
+    const checkTime = () => {
+      if (videoRef.current.currentTime >= endTime) {
+        videoRef.current.pause()
+        setIsPlaying(false)
+      } else {
+        requestAnimationFrame(checkTime)
+      }
     }
-  };
+    checkTime()
+  }
 
-  // Helper: create a preview URL for the uploaded file
-  const videoUrl = file ? URL.createObjectURL(file) : null;
-
-  // Determine context-aware warning message
-  const warningMsg = file
-    ? "Long video detected! Enter the segment you want to use (2-15 seconds)."
-    : "Long YouTube video detected! Enter the segment you want to use (2-15 seconds).";
-
-  // Video ref for segment preview
-  const videoRef = useRef(null);
-
-  // Handle segment preview
-  const handlePreviewSegment = () => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = startTime;
-      videoRef.current.play();
-      // Remove any previous listeners
-      videoRef.current.onended = null;
-      videoRef.current.ontimeupdate = null;
-      // Pause at endTime
-      videoRef.current.ontimeupdate = () => {
-        if (videoRef.current.currentTime >= endTime) {
-          videoRef.current.pause();
-          videoRef.current.ontimeupdate = null;
-        }
-      };
-    }
-  };
-
-  // Keep sliders and text inputs in sync
-  const handleStartSlider = (val) => {
-    setStartTimeInput(val);
-    // If endTime is less than start+2, bump endTime
-    if (parseFloat(endTimeInput) < parseFloat(val) + 2) {
-      setEndTimeInput((parseFloat(val) + 2).toString());
-    }
-  };
-  const handleEndSlider = (val) => {
-    setEndTimeInput(val);
-    // If startTime is more than end-2, lower startTime
-    if (parseFloat(startTimeInput) > parseFloat(val) - 2) {
-      setStartTimeInput((parseFloat(val) - 2).toString());
-    }
-  };
+  if (!videoUrl) return null
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -94,108 +116,134 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, lon
         <div className="flex items-center space-x-2">
           <span className="text-yellow-600">⚠️</span>
           <p className="text-yellow-700 text-sm">
-            <strong>{warningMsg}</strong>
+            <strong>Long video detected!</strong> Please select a segment (2-30 seconds) to create your GIF.
           </p>
         </div>
       </div>
 
-      {/* Video preview for MP4 uploads */}
-      {file && (
-        <div className="flex flex-col items-center space-y-4">
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            controls
-            style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 12, boxShadow: "0 2px 8px #0001" }}
-          />
-          {/* Range sliders for segment selection */}
-          <div className="flex flex-col items-center space-y-2 w-full">
-            <label className="w-full">
-              <span className="block text-xs text-gray-600">Start Time: {startTime}s</span>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(endTime - 2, 2)}
-                value={startTime}
-                onChange={e => handleStartSlider(e.target.value)}
-                step={0.1}
-                className="w-full"
-              />
-            </label>
-            <label className="w-full">
-              <span className="block text-xs text-gray-600">End Time: {endTime}s</span>
-              <input
-                type="range"
-                min={Math.min(parseFloat(startTime) + 2, duration - 2)}
-                max={duration}
-                value={endTime}
-                onChange={e => handleEndSlider(e.target.value)}
-                step={0.1}
-                className="w-full"
-              />
-            </label>
-            <button
-              type="button"
-              className="mt-2 px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-              onClick={handlePreviewSegment}
-              disabled={segmentInvalid}
-            >
-              Preview Segment
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Video Player */}
+      <div className="relative bg-black rounded-lg overflow-hidden">
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="w-full h-64 object-contain"
+          onLoadedMetadata={handleLoadedMetadata}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
 
-      <div className="flex space-x-4">
-        <div>
-          <label>Start Time (seconds or mm:ss):</label>
+        {/* Play/Pause Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <button
+            onClick={handlePlayPause}
+            className="bg-black bg-opacity-50 text-white rounded-full p-4 hover:bg-opacity-70 transition-all"
+          >
+            {isPlaying ? (
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            ) : (
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="space-y-4">
+        <div className="relative">
           <input
-            type="text"
-            value={startTimeInput}
-            onChange={e => setStartTimeInput(e.target.value)}
-            className="border rounded px-2 py-1"
+            type="range"
+            min="0"
+            max={duration}
+            step="0.1"
+            value={currentTime}
+            onChange={(e) => handleSeek(Number.parseFloat(e.target.value))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          />
+
+          {/* Segment Indicators */}
+          <div
+            className="absolute top-0 h-2 bg-blue-500 rounded-lg pointer-events-none"
+            style={{
+              left: `${(startTime / duration) * 100}%`,
+              width: `${((endTime - startTime) / duration) * 100}%`,
+            }}
           />
         </div>
+
+        <div className="text-center text-sm text-gray-600">
+          Current: {formatTime(currentTime)} / {formatTime(duration)}
+        </div>
+      </div>
+
+      {/* Segment Controls */}
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label>End Time (seconds or mm:ss):</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Start Time: {formatTime(startTime)}</label>
           <input
-            type="text"
-            value={endTimeInput}
-            onChange={e => setEndTimeInput(e.target.value)}
-            className="border rounded px-2 py-1"
+            type="range"
+            min="0"
+            max={Math.max(0, duration - 2)}
+            step="0.1"
+            value={startTime}
+            onChange={(e) => handleStartTimeChange(e.target.value)}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">End Time: {formatTime(endTime)}</label>
+          <input
+            type="range"
+            min={Math.min(startTime + 2, duration)}
+            max={duration}
+            step="0.1"
+            value={endTime}
+            onChange={(e) => handleEndTimeChange(e.target.value)}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
         </div>
       </div>
 
+      {/* Segment Info */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
             <span className="font-medium text-blue-700">Duration:</span>
-            <div className="text-blue-600">{segmentDuration > 0 ? segmentDuration.toFixed(2) : "--"}s</div>
+            <div className="text-blue-600">{formatTime(getSegmentDuration())}</div>
           </div>
           <div>
             <span className="font-medium text-blue-700">Start:</span>
-            <div className="text-blue-600">{!isNaN(startTime) ? startTime : "--"}s</div>
+            <div className="text-blue-600">{formatTime(startTime)}</div>
           </div>
           <div>
             <span className="font-medium text-blue-700">End:</span>
-            <div className="text-blue-600">{!isNaN(endTime) ? endTime : "--"}s</div>
+            <div className="text-blue-600">{formatTime(endTime)}</div>
           </div>
         </div>
-        {segmentDuration > 15 && (
+
+        {getSegmentDuration() > 15 && (
           <div className="mt-2 text-red-600 text-sm">⚠️ Segment too long! Maximum 15 seconds allowed.</div>
         )}
-        {segmentDuration < 2 && (
+
+        {getSegmentDuration() < 2 && (
           <div className="mt-2 text-red-600 text-sm">⚠️ Segment too short! Minimum 2 seconds required.</div>
-        )}
-        {endTime > duration && (
-          <div className="mt-2 text-red-600 text-sm">⚠️ End time exceeds video duration ({duration}s).</div>
-        )}
-        {endTime <= startTime && (
-          <div className="mt-2 text-red-600 text-sm">⚠️ End time must be after start time.</div>
         )}
       </div>
 
+      {/* Action Buttons */}
       <div className="flex justify-between space-x-4">
         <button
           onClick={onCancel}
@@ -203,16 +251,24 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, lon
         >
           Cancel
         </button>
+
+        <button
+          onClick={previewSegment}
+          className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium"
+        >
+          Preview Segment
+        </button>
+
         <button
           onClick={handleConfirmSegment}
-          disabled={segmentInvalid}
+          disabled={getSegmentDuration() < 2 || getSegmentDuration() > 15}
           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
         >
           Use This Segment
         </button>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default VideoSegmentSelector;
+export default VideoSegmentSelector
