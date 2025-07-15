@@ -58,13 +58,28 @@ function App() {
     setYoutubeSegment(null);
   };
 
-  const handleYouTubeUrl = (url) => {
-    setYoutubeUrl(url);
+  const handleYouTubeUrl = async (url) => {
+    setYoutubeUrl(""); // Clear until checks are done
     setFile(null);
     setError("");
     setShowSegmentSelector(false);
     setSelectedSegment(null);
     setYoutubeSegment(null);
+
+    try {
+      // Fetch YouTube metadata to get duration
+      const meta = await apiService.getYoutubeMetadata(url);
+      if (meta && meta.duration > 9) {
+        // If video is too long, trigger segment selector
+        setLongVideo({ youtubeUrl: url, duration: meta.duration });
+        setShowSegmentSelector(true);
+      } else {
+        // If short enough, just set the URL
+        setYoutubeUrl(url);
+      }
+    } catch (err) {
+      setError("Failed to fetch YouTube video metadata. Please check the URL and try again.");
+    }
   };
 
   const handleLongVideoDetected = (data, duration) => {
@@ -325,6 +340,7 @@ function App() {
                   youtubeUrl={longVideo?.youtubeUrl}
                   onSegmentSelect={handleSegmentSelect}
                   onCancel={handleSegmentCancel}
+                  duration={longVideo?.duration}
                 />
               )}
             </div>

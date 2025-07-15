@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect } from "react"
 import ReactPlayer from "react-player";
 
-const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) => {
+const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, duration: propDuration }) => {
   const videoRef = useRef(null)
   const playerRef = useRef(null)
-  const [duration, setDuration] = useState(0)
+  const [duration, setDuration] = useState(propDuration || 0)
   const [startTime, setStartTime] = useState(0)
   const [endTime, setEndTime] = useState(15) // Changed from 30 to 15 seconds max
   const [currentTime, setCurrentTime] = useState(0)
@@ -23,7 +23,11 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel }) =
       setVideoUrl(url)
       return () => URL.revokeObjectURL(url)
     }
-  }, [file])
+    if (youtubeUrl && propDuration) {
+      setDuration(propDuration)
+      setEndTime(Math.min(15, propDuration))
+    }
+  }, [file, youtubeUrl, propDuration])
 
   // For regular video files
   const handleLoadedMetadata = () => {
