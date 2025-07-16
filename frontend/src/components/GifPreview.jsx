@@ -82,15 +82,18 @@ const GifPreview = ({ gifs }) => {
         <p className="text-gray-600 text-lg">Click on any GIF to download it</p>
       </div>
 
-      {/* Improved responsive grid with better spacing */}
-      <div className="w-full max-w-7xl mx-auto px-4 py-6">
-        <div className={`
-          grid gap-8 w-full mx-auto
-          ${gifs.length === 1 ? "grid-cols-1 max-w-2xl" : ""}
-          ${gifs.length === 2 ? "grid-cols-1 lg:grid-cols-2 max-w-5xl" : ""}
-          ${gifs.length === 3 ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3 max-w-6xl" : ""}
-          ${gifs.length >= 4 ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : ""}
-        `}>
+      {/* Improved responsive grid container */}
+      <div className="w-full mx-auto px-2 md:px-4 py-4">
+        <div
+          className={`
+          grid gap-6 md:gap-8 w-full max-w-7xl 2xl:max-w-screen-2xl mx-auto
+          ${gifs.length === 1 ? "grid-cols-1 max-w-3xl" : ""}
+          ${gifs.length === 2 ? "grid-cols-1 sm:grid-cols-2 max-w-4xl" : ""}
+          ${gifs.length === 3 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl" : ""}
+          ${gifs.length === 4 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 max-w-7xl" : ""}
+          ${gifs.length >= 5 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" : ""}
+        `}
+        >
           {gifs.map((gif, index) => {
             const gifUrl = `${BASE_URL}${gif.url}`
             const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
@@ -104,8 +107,14 @@ const GifPreview = ({ gifs }) => {
               >
                 {/* Flexible image container that adapts to content */}
                 <div
-                  className="relative group cursor-pointer bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden"
+                  className="relative group cursor-pointer bg-gray-100 overflow-hidden flex items-center justify-center border border-gray-200"
                   onClick={() => downloadGif(gifUrl, filename)}
+                  style={{
+                    aspectRatio: '4/3',
+                    minHeight: '260px',
+                    maxHeight: '440px',
+                    background: '#f8fafc',
+                  }}
                 >
                   {imageErrors[gif.id] ? (
                     <div className="w-full h-80 flex items-center justify-center bg-gray-200">
