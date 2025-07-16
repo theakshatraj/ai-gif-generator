@@ -60,6 +60,7 @@ class VideoService {
   }
 
   async downloadWithGalleryDl(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
 
@@ -93,6 +94,7 @@ class VideoService {
   }
 
   async downloadWithStreamlink(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
 
@@ -126,6 +128,7 @@ class VideoService {
   }
 
   async downloadWithYoutubeDlExec(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
 
@@ -158,6 +161,7 @@ class VideoService {
   }
 
   async downloadWithYtDlpEnhanced(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
     let cookieFilePath = null
@@ -277,6 +281,7 @@ class VideoService {
   }
 
   async downloadWithProxy(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.%(ext)s`)
     let cookieFilePath = null
@@ -326,6 +331,7 @@ class VideoService {
 
   // Download a segment of a YouTube video using yt-dlp --download-sections
   async downloadYouTubeSegmentWithYtDlp(youtubeUrl, segmentStart, segmentEnd) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl);
     const outputPath = path.join(this.tempDir, `${videoId}_segment.%(ext)s`);
     let cookieFilePath = null;
@@ -364,6 +370,7 @@ class VideoService {
   }
 
   async downloadYouTubeVideo(youtubeUrl, segmentStart = null, segmentEnd = null) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     if (!videoId) {
       throw new Error('Invalid YouTube URL for download')
@@ -403,6 +410,7 @@ class VideoService {
   }
 
   async downloadWithYtdlCore(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     const videoId = youtubeService.extractVideoId(youtubeUrl)
     const outputPath = path.join(this.tempDir, `${videoId}.mp4`)
     console.log(`📥 Attempting to download YouTube video with ytdl-core: ${youtubeUrl}`)
@@ -481,6 +489,7 @@ class VideoService {
   }
 
   async checkVideoAccessibility(youtubeUrl) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     let cookieFilePath = null
     try {
       cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
@@ -540,6 +549,7 @@ class VideoService {
   }
 
   async getYouTubeData(youtubeUrl, segmentStart = null, segmentEnd = null) {
+    youtubeUrl = youtubeService.sanitizeYouTubeUrl(youtubeUrl);
     console.log("🔍 Getting YouTube data...");
     let videoPath = null;
     let videoInfo = null;

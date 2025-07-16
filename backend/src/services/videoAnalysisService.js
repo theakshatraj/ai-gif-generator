@@ -18,6 +18,12 @@ class VideoAnalysisService {
 
   // 📥 NEW METHOD: Download video from YouTube
   async downloadFromYoutube(url, outputPath = null) {
+    // Sanitize the YouTube URL to canonical form
+    if (url && url.includes('youtube.com')) {
+      // Dynamically import youtubeService to avoid circular dependency
+      const youtubeService = (await import('./youtubeService.js')).default;
+      url = youtubeService.sanitizeYouTubeUrl(url);
+    }
     try {
       console.log("📥 Downloading video from YouTube...");
       console.log("🔗 URL:", url);

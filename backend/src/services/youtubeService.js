@@ -87,7 +87,14 @@ class YouTubeService {
     return null
   }
 
+  // Sanitize a YouTube URL to canonical form (https://www.youtube.com/watch?v=VIDEO_ID)
+  sanitizeYouTubeUrl(url) {
+    const videoId = this.extractVideoId(url);
+    return videoId ? `https://www.youtube.com/watch?v=${videoId}` : url;
+  }
+
   async getVideoMetadataYtDlp(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     let cookieFilePath = null
     try {
       await this.rateLimiter.consume("metadata")
@@ -136,6 +143,7 @@ class YouTubeService {
   }
 
   async getVideoMetadataWebScraping(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     try {
       await this.rateLimiter.consume("scraping")
 
@@ -199,6 +207,7 @@ class YouTubeService {
   }
 
   async getVideoMetadataPuppeteer(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     try {
       await this.initBrowser()
       await this.rateLimiter.consume("puppeteer")
@@ -250,6 +259,7 @@ class YouTubeService {
   }
 
   async getVideoMetadata(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     const methods = [
       { name: "yt-dlp", method: () => this.getVideoMetadataYtDlp(youtubeUrl) },
       { name: "web-scraping", method: () => this.getVideoMetadataWebScraping(youtubeUrl) },
@@ -272,6 +282,7 @@ class YouTubeService {
   }
 
   async getVideoTranscriptYtDlp(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     let cookieFilePath = null
     try {
       cookieFilePath = await createCookieFile(process.env.YOUTUBE_COOKIES)
@@ -323,6 +334,7 @@ class YouTubeService {
   }
 
   async getVideoTranscriptAPI(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     try {
       const videoId = this.extractVideoId(youtubeUrl)
       if (!videoId) throw new Error("Invalid video ID")
@@ -353,6 +365,7 @@ class YouTubeService {
   }
 
   async getVideoTranscript(youtubeUrl) {
+    youtubeUrl = this.sanitizeYouTubeUrl(youtubeUrl);
     const methods = [
       { name: "yt-dlp", method: () => this.getVideoTranscriptYtDlp(youtubeUrl) },
       { name: "api", method: () => this.getVideoTranscriptAPI(youtubeUrl) },
