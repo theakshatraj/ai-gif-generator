@@ -4,6 +4,8 @@ import { useState } from "react"
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+
+
 const GifPreview = ({ gifs }) => {
   const [loadingStates, setLoadingStates] = useState({})
   const [imageErrors, setImageErrors] = useState({})
@@ -77,7 +79,7 @@ const GifPreview = ({ gifs }) => {
         <p className="text-gray-600">Click on any GIF to download it</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 px-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10 md:gap-12 px-2 md:px-8 py-4 justify-center">
         {gifs.map((gif, index) => {
           const gifUrl = `${BASE_URL}${gif.url}`
           const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
@@ -85,11 +87,11 @@ const GifPreview = ({ gifs }) => {
           return (
             <div
               key={gif.id}
-              className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 w-full"
+              className="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 max-w-xs mx-auto flex flex-col mb-8 md:mb-12"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div
-                className="aspect-square bg-white flex items-center justify-center relative group cursor-pointer"
+                className="aspect-[3/2] min-h-[220px] bg-white flex items-center justify-center relative group cursor-pointer"
                 onClick={() => downloadGif(gifUrl, filename)}
               >
                 {imageErrors[gif.id] ? (
@@ -124,7 +126,7 @@ const GifPreview = ({ gifs }) => {
                   <img
                     src={gifUrl || "/placeholder.svg"}
                     alt={gif.caption || `Generated GIF ${index + 1}`}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    className="w-full h-full object-contain bg-white transition-transform duration-300 group-hover:scale-105"
                     onError={() => handleImageError(gif.id, gifUrl)}
                     onLoad={() => handleImageLoad(gif.id, gifUrl)}
                   />
@@ -148,42 +150,34 @@ const GifPreview = ({ gifs }) => {
 
                 {/* Caption overlay */}
                 {gif.caption && (
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-                    <p className="text-white text-sm font-medium truncate">{gif.caption}</p>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                    <p className="text-white text-sm font-medium">{gif.caption}</p>
                   </div>
                 )}
 
                 {/* Caption status indicator */}
                 {gif.hasCaption && (
                   <div className="absolute top-2 right-2">
-                    <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">📝</div>
+                    <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">📝 Captioned</div>
                   </div>
                 )}
               </div>
 
-              <div className="p-4">
+              <div className="p-5 flex-1 flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-gray-900 truncate flex-1 mr-2">
-                    {gif.caption || `GIF #${index + 1}`}
-                  </span>
-                  {gif.size && (
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
-                      {gif.size}
-                    </span>
-                  )}
+                  <span className="text-sm font-medium text-gray-900 truncate max-w-[120px]">{gif.caption || `GIF #${index + 1}`}</span>
+                  {gif.size && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{gif.size}</span>}
                 </div>
 
-                {(gif.startTime !== undefined && gif.endTime !== undefined) && (
-                  <div className="text-xs text-gray-500 mb-3">
-                    ⏱️ {gif.startTime}s - {gif.endTime}s
-                  </div>
-                )}
+                <div className="text-xs text-gray-500 mb-3">
+                  ⏱️ {gif.startTime}s - {gif.endTime}s
+                </div>
 
-                <div className="flex space-x-2">
+                <div className="flex space-x-2 mt-auto">
                   <button
                     onClick={() => downloadGif(gifUrl, filename)}
                     disabled={loadingStates[filename]}
-                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center min-h-[36px]"
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center"
                   >
                     {loadingStates[filename] ? (
                       <>
@@ -231,7 +225,7 @@ const GifPreview = ({ gifs }) => {
                         alert("GIF URL copied to clipboard!")
                       }
                     }}
-                    className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm min-h-[36px]"
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
