@@ -10,6 +10,8 @@ import videoTrimmer from "./utils/videoTrimmer";
 import HeroSection from "./components/HeroSection";
 import Header from "./components/Header";
 import FeaturesSection from "./components/FeaturesSection";
+import HowItWorksSection from "./components/HowItWorksSection";
+import TestimonialsSection from "./components/TestimonialsSection";
 
 function App() {
   const [step, setStep] = useState(1);
@@ -407,6 +409,8 @@ export default function MainApp() {
       <Header />
       <HeroSection />
       <FeaturesSection />
+      <HowItWorksSection />
+      <TestimonialsSection />
       <App />
     </>
   );
