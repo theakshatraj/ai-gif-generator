@@ -79,7 +79,7 @@ const GifPreview = ({ gifs }) => {
         <p className="text-gray-600">Click on any GIF to download it</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8 justify-center">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10 md:gap-12 px-2 md:px-8 py-4 justify-center">
         {gifs.map((gif, index) => {
           const gifUrl = `${BASE_URL}${gif.url}`
           const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
@@ -87,7 +87,7 @@ const GifPreview = ({ gifs }) => {
           return (
             <div
               key={gif.id}
-              className="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 max-w-xs mx-auto flex flex-col"
+              className="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 max-w-xs mx-auto flex flex-col mb-8 md:mb-12"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div
