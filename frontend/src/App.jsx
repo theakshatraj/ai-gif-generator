@@ -7,6 +7,8 @@ import GifPreview from "./components/GifPreview";
 import LoadingSpinner from "./components/LoadingSpinner";
 import apiService from "./services/api";
 import videoTrimmer from "./utils/videoTrimmer";
+import HeroSection from "./components/HeroSection";
+import Header from "./components/Header";
 
 function App() {
   const [step, setStep] = useState(1);
@@ -211,18 +213,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
       <div className="max-w-6xl mx-auto px-4">
-        <header className="text-center mb-12 animate-fade-in">
-          <h1 className="text-5xl font-bold text-gradient mb-4">
-            🎬 MemeGIF Studio
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-2">
-            Turn any video into viral-worthy GIFs with AI-powered meme captions
-          </p>
-          <p className="text-lg text-gray-500 max-w-xl mx-auto">
-            ✨ Upload • Select • Describe • Generate • Share ✨
-          </p>
-        </header>
-
         {/* Error Display */}
         {error && (
           <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -409,4 +399,12 @@ function App() {
   );
 }
 
-export default App;
+export default function MainApp() {
+  return (
+    <>
+      <Header />
+      <HeroSection />
+      <App />
+    </>
+  );
+}
