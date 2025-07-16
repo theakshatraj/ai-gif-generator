@@ -81,6 +81,15 @@ const VideoSegmentSelector = ({ file, youtubeUrl, onSegmentSelect, onCancel, dur
     return () => raf && cancelAnimationFrame(raf);
   }, [isPlaying, youtubeUrl, ytReady, endTime]);
 
+  useEffect(() => {
+    if (!youtubeUrl && isPlaying && videoRef.current) {
+      if (currentTime >= endTime) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    }
+  }, [currentTime, endTime, isPlaying, youtubeUrl]);
+
   const handlePlayPause = () => {
     if (youtubeUrl) {
       if (!ytReady || !youtubePlayerRef.current) return;
