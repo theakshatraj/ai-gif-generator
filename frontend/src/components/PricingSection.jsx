@@ -20,7 +20,7 @@ const plans = [
   },
   {
     name: 'Pro',
-    price: '$19',
+    price: '$5',
     period: '/per month',
     icon: (
       <svg className="h-10 w-10 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 8v4l3 3" /></svg>
@@ -39,7 +39,7 @@ const plans = [
   },
   {
     name: 'Enterprise',
-    price: '$99',
+    price: '$50',
     period: '/per month',
     icon: (
       <svg className="h-10 w-10 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const navLinks = [
   { name: 'Features', href: '#features' },
@@ -40,12 +41,12 @@ const Header = () => (
         >
           Sign In
         </a>
-        <a
-          href="#generator"
+        <Link
+          to="/generate"
           className="px-5 py-2 rounded-full font-semibold text-white bg-gradient-to-tr from-indigo-500 to-blue-500 shadow-md hover:from-indigo-600 hover:to-blue-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-base"
         >
           Start Creating
-        </a>
+        </Link>
       </div>
     </div>
   </header>

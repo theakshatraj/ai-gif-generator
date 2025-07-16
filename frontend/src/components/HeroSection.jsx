@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const HeroSection = () => (
   <section className="w-full bg-gradient-to-b from-[#faf7ff] to-[#f5f8ff] pt-16 pb-20 border-b border-gray-100">
@@ -18,13 +19,13 @@ const HeroSection = () => (
       </p>
       {/* CTAs */}
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-        <a
-          href="#generator"
+        <Link
+          to="/generate"
           className="inline-flex items-center gap-2 px-7 py-3 rounded-xl font-semibold text-white bg-gradient-to-tr from-indigo-500 to-blue-500 shadow-md hover:from-indigo-600 hover:to-blue-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-lg"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>
           Start Creating Free
-        </a>
+        </Link>
         <a
           href="#demo"
           className="inline-flex items-center gap-2 px-7 py-3 rounded-xl font-semibold text-indigo-600 bg-white border border-indigo-100 shadow hover:bg-indigo-50 transition-all duration-200 text-lg"
