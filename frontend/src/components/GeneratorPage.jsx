@@ -199,7 +199,7 @@ const GeneratorPage = () => {
           {toast}
         </div>
       )}
-      <div className="w-full max-w-2xl mx-auto">
+      <div className="w-full max-w-5xl mx-auto">
         {/* Stepper */}
         <div className="flex items-center justify-center gap-6 mb-10">
           {steps.map((s, idx) => (
