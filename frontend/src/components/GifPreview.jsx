@@ -2,26 +2,21 @@
 
 import { useState } from "react"
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 
 const GifPreview = ({ gifs }) => {
   const [loadingStates, setLoadingStates] = useState({})
   const [imageErrors, setImageErrors] = useState({})
+  const [imageDimensions, setImageDimensions] = useState({})
 
   const downloadGif = async (gifUrl, filename) => {
     try {
       setLoadingStates((prev) => ({ ...prev, [filename]: true }))
-
       console.log("🔽 Downloading GIF from:", gifUrl)
-
       const response = await fetch(gifUrl)
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
@@ -31,7 +26,6 @@ const GifPreview = ({ gifs }) => {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-
       console.log("✅ Download completed:", filename)
     } catch (error) {
       console.error("❌ Download failed:", error)
@@ -46,9 +40,20 @@ const GifPreview = ({ gifs }) => {
     setImageErrors((prev) => ({ ...prev, [gifId]: true }))
   }
 
-  const handleImageLoad = (gifId, gifUrl) => {
+  const handleImageLoad = (gifId, gifUrl, event) => {
     console.log("✅ GIF loaded successfully:", gifUrl)
     setImageErrors((prev) => ({ ...prev, [gifId]: false }))
+
+    // Store the actual dimensions of the loaded image
+    const img = event.target
+    setImageDimensions((prev) => ({
+      ...prev,
+      [gifId]: {
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        aspectRatio: img.naturalWidth / img.naturalHeight,
+      },
+    }))
   }
 
   if (!gifs || gifs.length === 0) {
@@ -79,36 +84,43 @@ const GifPreview = ({ gifs }) => {
         <p className="text-gray-600">Click on any GIF to download it</p>
       </div>
 
-      {/* Responsive, adaptive grid container */}
-      <div
-        className={`w-full mx-auto min-h-[60vh] px-2 md:px-8 py-4 flex justify-center`}
-      >
+      {/* Improved responsive grid container */}
+      <div className="w-full mx-auto px-2 md:px-4 py-4">
         <div
-          className={`grid gap-10 md:gap-12 w-full max-w-5xl
-            ${gifs.length === 1 ? "grid-cols-1" : ""}
-            ${gifs.length === 2 ? "sm:grid-cols-2" : ""}
-            ${gifs.length === 3 ? "sm:grid-cols-2 md:grid-cols-3" : ""}
-            ${gifs.length === 4 ? "sm:grid-cols-2 md:grid-cols-4" : ""}
-            ${gifs.length >= 5 ? "sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : ""}
-          `}
+          className={`
+          grid gap-6 md:gap-8 w-full max-w-7xl mx-auto
+          ${gifs.length === 1 ? "grid-cols-1 max-w-2xl" : ""}
+          ${gifs.length === 2 ? "grid-cols-1 sm:grid-cols-2 max-w-4xl" : ""}
+          ${gifs.length === 3 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl" : ""}
+          ${gifs.length === 4 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 max-w-6xl" : ""}
+          ${gifs.length >= 5 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" : ""}
+        `}
         >
           {gifs.map((gif, index) => {
             const gifUrl = `${BASE_URL}${gif.url}`
             const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
+            const dimensions = imageDimensions[gif.id]
 
             return (
               <div
                 key={gif.id}
-                className="bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 w-full max-w-md mx-auto flex flex-col mb-8 md:mb-12"
+                className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 overflow-hidden"
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
+                {/* Improved image container with flexible sizing */}
                 <div
-                  className="aspect-[4/3] min-h-[220px] bg-white flex items-center justify-center relative group cursor-pointer"
+                  className="relative group cursor-pointer bg-gray-50 overflow-hidden"
                   onClick={() => downloadGif(gifUrl, filename)}
+                  style={{
+                    // Use actual aspect ratio if available, otherwise default to a reasonable ratio
+                    aspectRatio: dimensions?.aspectRatio || "16/9",
+                    minHeight: "200px",
+                    maxHeight: "400px",
+                  }}
                 >
                   {imageErrors[gif.id] ? (
                     <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                      <div className="text-center">
+                      <div className="text-center p-4">
                         <svg
                           className="mx-auto h-12 w-12 text-gray-400 mb-2"
                           fill="none"
@@ -122,74 +134,102 @@ const GifPreview = ({ gifs }) => {
                             d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                           />
                         </svg>
-                        <p className="text-sm text-gray-500">Failed to load GIF</p>
+                        <p className="text-sm text-gray-500 mb-2">Failed to load GIF</p>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             setImageErrors((prev) => ({ ...prev, [gif.id]: false }))
                           }}
-                          className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                          className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition-colors"
                         >
                           Retry
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <img
-                      src={gifUrl || "/placeholder.svg"}
-                      alt={gif.caption || `Generated GIF ${index + 1}`}
-                      className="w-full h-full object-contain bg-white transition-transform duration-300 group-hover:scale-105"
-                      onError={() => handleImageError(gif.id, gifUrl)}
-                      onLoad={() => handleImageLoad(gif.id, gifUrl)}
-                    />
-                  )}
+                    <>
+                      <img
+                        src={gifUrl || "/placeholder.svg"}
+                        alt={gif.caption || `Generated GIF ${index + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={() => handleImageError(gif.id, gifUrl)}
+                        onLoad={(e) => handleImageLoad(gif.id, gifUrl, e)}
+                        loading="lazy"
+                      />
 
-                  {/* Overlay on hover */}
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <div className="bg-white rounded-full p-3 shadow-lg">
-                        <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                          />
-                        </svg>
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform scale-90 group-hover:scale-100">
+                          <div className="bg-white rounded-full p-4 shadow-lg">
+                            <svg
+                              className="w-6 h-6 text-gray-700"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                              />
+                            </svg>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Caption overlay */}
-                  {gif.caption && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-                      <p className="text-white text-sm font-medium">{gif.caption}</p>
-                    </div>
-                  )}
+                      {/* Caption overlay */}
+                      {gif.caption && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4">
+                          <p className="text-white text-sm font-medium line-clamp-2">{gif.caption}</p>
+                        </div>
+                      )}
 
-                  {/* Caption status indicator */}
-                  {gif.hasCaption && (
-                    <div className="absolute top-2 right-2">
-                      <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">📝 Captioned</div>
-                    </div>
+                      {/* Status indicators */}
+                      <div className="absolute top-3 right-3 flex gap-2">
+                        {gif.hasCaption && (
+                          <div className="bg-green-500/90 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full font-medium">
+                            📝 Captioned
+                          </div>
+                        )}
+                        {dimensions && (
+                          <div className="bg-blue-500/90 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full font-medium">
+                            {dimensions.width}×{dimensions.height}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
 
-                <div className="p-5 flex-1 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-900 truncate max-w-[120px]">{gif.caption || `GIF #${index + 1}`}</span>
-                    {gif.size && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{gif.size}</span>}
+                {/* Card content */}
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-900 line-clamp-2 flex-1 mr-2">
+                      {gif.caption || `GIF #${index + 1}`}
+                    </h4>
+                    {gif.size && (
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full whitespace-nowrap">
+                        {gif.size}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="text-xs text-gray-500 mb-3">
-                    ⏱️ {gif.startTime}s - {gif.endTime}s
-                  </div>
+                  {gif.startTime !== undefined && gif.endTime !== undefined && (
+                    <div className="text-xs text-gray-500 mb-3 flex items-center">
+                      <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12,6 12,12 16,14" />
+                      </svg>
+                      {gif.startTime}s - {gif.endTime}s
+                    </div>
+                  )}
 
-                  <div className="flex space-x-2 mt-auto">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => downloadGif(gifUrl, filename)}
                       disabled={loadingStates[filename]}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center"
+                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center min-h-[36px]"
                     >
                       {loadingStates[filename] ? (
                         <>
@@ -201,18 +241,18 @@ const GifPreview = ({ gifs }) => {
                               r="10"
                               stroke="currentColor"
                               strokeWidth="4"
-                            ></circle>
+                            />
                             <path
                               className="opacity-75"
                               fill="currentColor"
                               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
+                            />
                           </svg>
                           Downloading...
                         </>
                       ) : (
                         <>
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -226,7 +266,8 @@ const GifPreview = ({ gifs }) => {
                     </button>
 
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         if (navigator.share) {
                           navigator.share({
                             title: "Check out this GIF!",
@@ -237,7 +278,8 @@ const GifPreview = ({ gifs }) => {
                           alert("GIF URL copied to clipboard!")
                         }
                       }}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
+                      className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm flex items-center justify-center"
+                      title="Share GIF"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -256,6 +298,7 @@ const GifPreview = ({ gifs }) => {
         </div>
       </div>
 
+      {/* Download all button */}
       {gifs.length > 1 && (
         <div className="text-center pt-6 border-t border-gray-200">
           <button
