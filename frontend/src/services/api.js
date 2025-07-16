@@ -2,6 +2,7 @@ class ApiService {
   constructor() {
     // ✅ Use environment variable or fallback to localhost
     this.baseURL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+    console.log("🔍 API Service initialized with baseURL:", this.baseURL);
   }
 
   // POST: Generate GIFs
