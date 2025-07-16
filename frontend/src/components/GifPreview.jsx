@@ -111,15 +111,13 @@ const GifPreview = ({ gifs }) => {
                   onClick={() => downloadGif(gifUrl, filename)}
                   style={{
                     aspectRatio: '4/3',
-                    minHeight: '340px', // Increased from 260px
-                    maxHeight: '600px', // Increased from 440px
-                    minWidth: '420px',  // Added for wider box
-                    maxWidth: '540px',  // Added for wider box
+                    minHeight: '260px',
+                    maxHeight: '440px',
                     background: '#f8fafc',
                   }}
                 >
                   {imageErrors[gif.id] ? (
-                    <div className="w-full h-[340px] flex items-center justify-center bg-gray-200"> // Match minHeight
+                    <div className="w-full h-80 flex items-center justify-center bg-gray-200">
                       <div className="text-center p-6">
                         <svg
                           className="mx-auto h-16 w-16 text-gray-400 mb-4"
@@ -151,11 +149,11 @@ const GifPreview = ({ gifs }) => {
                       <img
                         src={gifUrl || "/placeholder.svg"}
                         alt={gif.caption || `Generated GIF ${index + 1}`}
-                        className="w-full h-auto max-h-[520px] object-contain transition-transform duration-300 group-hover:scale-105 bg-white" // Increased max-h
+                        className="w-full h-auto max-h-96 object-contain transition-transform duration-300 group-hover:scale-105 bg-white"
                         onError={() => handleImageError(gif.id, gifUrl)}
                         onLoad={(e) => handleImageLoad(gif.id, gifUrl, e)}
                         loading="lazy"
-                        style={{ minHeight: '240px' }} // Increased minHeight for image
+                        style={{ minHeight: '200px' }}
                       />
                       
                       {/* Hover overlay with download icon */}
