@@ -9,6 +9,7 @@ import apiService from "./services/api";
 import videoTrimmer from "./utils/videoTrimmer";
 import HeroSection from "./components/HeroSection";
 import Header from "./components/Header";
+import FeaturesSection from "./components/FeaturesSection";
 
 function App() {
   const [step, setStep] = useState(1);
@@ -233,7 +234,7 @@ function App() {
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${
                       step >= stepInfo.num
-                        ? "bg-blue-600 text-white shadow-lg scale-110"
+                        ? "bg-gradient-to-tr from-indigo-500 to-blue-500 text-white shadow-lg scale-110"
                         : "bg-gray-200 text-gray-600"
                     }`}
                   >
@@ -241,7 +242,7 @@ function App() {
                   </div>
                   <span
                     className={`mt-2 text-sm font-medium ${
-                      step >= stepInfo.num ? "text-blue-600" : "text-gray-500"
+                      step >= stepInfo.num ? "text-indigo-600" : "text-gray-500"
                     }`}
                   >
                     {stepInfo.label}
@@ -250,7 +251,7 @@ function App() {
                 {index < 2 && (
                   <div
                     className={`w-24 h-1 mx-4 rounded-full transition-all duration-300 ${
-                      step > stepInfo.num ? "bg-blue-600" : "bg-gray-200"
+                      step > stepInfo.num ? "bg-gradient-to-tr from-indigo-500 to-blue-500" : "bg-gray-200"
                     }`}
                   />
                 )}
@@ -259,11 +260,12 @@ function App() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        {/* Main Generator Card */}
+        <div className="bg-white/90 border border-gray-100 rounded-3xl shadow-2xl p-10 md:p-14 max-w-3xl mx-auto animate-fade-in">
           {step === 1 && !showSegmentSelector && (
             <div>
-              <h2 className="text-2xl font-bold mb-6 text-gray-900">
-                Upload Your Video
+              <h2 className="text-3xl md:text-4xl font-extrabold mb-8 text-gray-900 text-center bg-gradient-to-tr from-indigo-500 to-blue-500 bg-clip-text text-transparent">
+                Generate Captioned GIFs Instantly
               </h2>
               <FileUpload
                 onFileSelect={handleFileSelect}
@@ -272,7 +274,7 @@ function App() {
               />
 
               {(file || youtubeUrl) && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
                   <p className="text-green-700 text-sm">
                     ✅{" "}
                     {file ? (
@@ -300,11 +302,11 @@ function App() {
                 </div>
               )}
 
-              <div className="mt-8 flex justify-end">
+              <div className="mt-10 flex justify-end">
                 <button
                   onClick={() => setStep(2)}
                   disabled={!file && !youtubeUrl}
-                  className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
+                  className="px-10 py-3 rounded-full font-semibold text-white bg-gradient-to-tr from-indigo-500 to-blue-500 shadow-md hover:from-indigo-600 hover:to-blue-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
                 >
                   Next Step →
                 </button>
@@ -404,6 +406,7 @@ export default function MainApp() {
     <>
       <Header />
       <HeroSection />
+      <FeaturesSection />
       <App />
     </>
   );
