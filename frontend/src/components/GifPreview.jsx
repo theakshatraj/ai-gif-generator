@@ -79,7 +79,7 @@ const GifPreview = ({ gifs }) => {
         <p className="text-gray-600">Click on any GIF to download it</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8 justify-center">
         {gifs.map((gif, index) => {
           const gifUrl = `${BASE_URL}${gif.url}`
           const filename = `gif-${gif.id}-${gif.caption?.replace(/[^a-zA-Z0-9]/g, "-") || "generated"}.gif`
@@ -87,11 +87,11 @@ const GifPreview = ({ gifs }) => {
           return (
             <div
               key={gif.id}
-              className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+              className="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 max-w-xs mx-auto flex flex-col"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div
-                className="aspect-video bg-gray-100 relative group cursor-pointer"
+                className="aspect-[3/2] min-h-[220px] bg-white flex items-center justify-center relative group cursor-pointer"
                 onClick={() => downloadGif(gifUrl, filename)}
               >
                 {imageErrors[gif.id] ? (
@@ -126,7 +126,7 @@ const GifPreview = ({ gifs }) => {
                   <img
                     src={gifUrl || "/placeholder.svg"}
                     alt={gif.caption || `Generated GIF ${index + 1}`}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    className="w-full h-full object-contain bg-white transition-transform duration-300 group-hover:scale-105"
                     onError={() => handleImageError(gif.id, gifUrl)}
                     onLoad={() => handleImageLoad(gif.id, gifUrl)}
                   />
@@ -163,9 +163,9 @@ const GifPreview = ({ gifs }) => {
                 )}
               </div>
 
-              <div className="p-4">
+              <div className="p-5 flex-1 flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-gray-900">{gif.caption || `GIF #${index + 1}`}</span>
+                  <span className="text-sm font-medium text-gray-900 truncate max-w-[120px]">{gif.caption || `GIF #${index + 1}`}</span>
                   {gif.size && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{gif.size}</span>}
                 </div>
 
@@ -173,7 +173,7 @@ const GifPreview = ({ gifs }) => {
                   ⏱️ {gif.startTime}s - {gif.endTime}s
                 </div>
 
-                <div className="flex space-x-2">
+                <div className="flex space-x-2 mt-auto">
                   <button
                     onClick={() => downloadGif(gifUrl, filename)}
                     disabled={loadingStates[filename]}
