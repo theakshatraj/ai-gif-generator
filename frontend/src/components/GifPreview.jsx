@@ -84,7 +84,7 @@ const GifPreview = ({ gifs }) => {
         className={`w-full mx-auto min-h-[60vh] px-2 md:px-8 py-4 flex justify-center`}
       >
         <div
-          className={`grid gap-10 md:gap-12 w-full max-w-7xl
+          className={`grid gap-10 md:gap-12 w-full max-w-5xl
             ${gifs.length === 1 ? "grid-cols-1" : ""}
             ${gifs.length === 2 ? "sm:grid-cols-2" : ""}
             ${gifs.length === 3 ? "sm:grid-cols-2 md:grid-cols-3" : ""}
@@ -103,7 +103,7 @@ const GifPreview = ({ gifs }) => {
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
                 <div
-                  className="aspect-[3/2] min-h-[260px] bg-white flex items-center justify-center relative group cursor-pointer"
+                  className="aspect-[4/3] min-h-[220px] bg-white flex items-center justify-center relative group cursor-pointer"
                   onClick={() => downloadGif(gifUrl, filename)}
                 >
                   {imageErrors[gif.id] ? (
