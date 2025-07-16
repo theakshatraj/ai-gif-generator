@@ -12,6 +12,8 @@ import Header from "./components/Header";
 import FeaturesSection from "./components/FeaturesSection";
 import HowItWorksSection from "./components/HowItWorksSection";
 import TestimonialsSection from "./components/TestimonialsSection";
+import PricingSection from "./components/PricingSection";
+import Footer from "./components/Footer";
 
 function App() {
   const [step, setStep] = useState(1);
@@ -214,7 +216,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+    <div id="generator" className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Error Display */}
         {error && (
@@ -408,10 +410,12 @@ export default function MainApp() {
     <>
       <Header />
       <HeroSection />
-      <FeaturesSection />
+      <div id="features"><FeaturesSection /></div>
       <HowItWorksSection />
       <TestimonialsSection />
+      <div id="pricing"><PricingSection /></div>
       <App />
+      <Footer />
     </>
   );
 }
