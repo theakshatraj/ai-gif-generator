@@ -199,7 +199,8 @@ const GeneratorPage = () => {
           {toast}
         </div>
       )}
-      <div className="w-full max-w-2xl mx-auto">
+      
+      <div className="w-full max-w-4xl mx-auto">
         {/* Stepper */}
         <div className="flex items-center justify-center gap-6 mb-10">
           {steps.map((s, idx) => (
@@ -211,8 +212,16 @@ const GeneratorPage = () => {
             </div>
           ))}
         </div>
+
         {/* Main Card */}
-        <div className="bg-white/80 backdrop-blur-lg border border-blue-100 rounded-3xl shadow-2xl p-8 md:p-12 animate-fade-in glass-effect">
+        <div className="bg-white/80 backdrop-blur-lg border border-blue-100 rounded-3xl shadow-2xl p-8 md:p-12 animate-fade-in glass-effect relative">
+          {/* Loading Overlay */}
+          {loading && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-3xl flex items-center justify-center z-10">
+              <LoadingSpinner />
+            </div>
+          )}
+
           {step === 1 && !showSegmentSelector && (
             <div className="space-y-8">
               <h2 className="text-3xl md:text-4xl font-extrabold mb-4 text-center bg-gradient-to-tr from-indigo-500 to-blue-500 bg-clip-text text-transparent">Upload Video or Paste YouTube Link</h2>
@@ -253,6 +262,7 @@ const GeneratorPage = () => {
               </div>
             </div>
           )}
+
           {showSegmentSelector && (
             <div className="animate-fade-in">
               <VideoSegmentSelector
@@ -264,6 +274,7 @@ const GeneratorPage = () => {
               />
             </div>
           )}
+
           {step === 2 && (
             <div className="space-y-8 animate-fade-in">
               <h2 className="text-2xl md:text-3xl font-bold mb-4 text-center text-indigo-700">Describe Your GIF Theme</h2>
@@ -292,6 +303,7 @@ const GeneratorPage = () => {
               )}
             </div>
           )}
+
           {step === 3 && (
             <div className="space-y-8 animate-fade-in">
               <h2 className="text-2xl md:text-3xl font-bold mb-4 text-center text-indigo-700">Your Generated GIFs</h2>
@@ -306,11 +318,10 @@ const GeneratorPage = () => {
               </div>
             </div>
           )}
-          {loading && <LoadingSpinner />}
         </div>
       </div>
     </div>
   );
 };
 
-export default GeneratorPage; 
+export default GeneratorPage;
