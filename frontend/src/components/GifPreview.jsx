@@ -109,13 +109,13 @@ const GifPreview = ({ gifs }) => {
               >
                 {/* Improved image container with flexible sizing */}
                 <div
-                  className="relative group cursor-pointer bg-gray-50 overflow-hidden"
+                  className="relative group cursor-pointer bg-gray-100 overflow-hidden flex items-center justify-center border border-gray-200"
                   onClick={() => downloadGif(gifUrl, filename)}
                   style={{
-                    // Use actual aspect ratio if available, otherwise default to a reasonable ratio
-                    aspectRatio: dimensions?.aspectRatio || "16/9",
-                    minHeight: "200px",
-                    maxHeight: "400px",
+                    aspectRatio: '4/3', // Always enforce 4:3 for preview
+                    minHeight: '200px',
+                    maxHeight: '340px',
+                    background: '#f8fafc',
                   }}
                 >
                   {imageErrors[gif.id] ? (
@@ -151,10 +151,11 @@ const GifPreview = ({ gifs }) => {
                       <img
                         src={gifUrl || "/placeholder.svg"}
                         alt={gif.caption || `Generated GIF ${index + 1}`}
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105 bg-white"
                         onError={() => handleImageError(gif.id, gifUrl)}
                         onLoad={(e) => handleImageLoad(gif.id, gifUrl, e)}
                         loading="lazy"
+                        style={{ aspectRatio: '4/3', maxHeight: '340px', background: '#fff' }}
                       />
 
                       {/* Hover overlay */}
