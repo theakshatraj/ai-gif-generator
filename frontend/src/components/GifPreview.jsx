@@ -88,11 +88,11 @@ const GifPreview = ({ gifs }) => {
       <div className="w-full mx-auto px-2 md:px-4 py-4">
         <div
           className={`
-          grid gap-6 md:gap-8 w-full max-w-7xl mx-auto
-          ${gifs.length === 1 ? "grid-cols-1 max-w-2xl" : ""}
+          grid gap-6 md:gap-8 w-full max-w-7xl 2xl:max-w-screen-2xl mx-auto
+          ${gifs.length === 1 ? "grid-cols-1 max-w-3xl" : ""}
           ${gifs.length === 2 ? "grid-cols-1 sm:grid-cols-2 max-w-4xl" : ""}
-          ${gifs.length === 3 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl" : ""}
-          ${gifs.length === 4 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 max-w-6xl" : ""}
+          ${gifs.length === 3 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl" : ""}
+          ${gifs.length === 4 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 max-w-7xl" : ""}
           ${gifs.length >= 5 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" : ""}
         `}
         >
@@ -112,9 +112,9 @@ const GifPreview = ({ gifs }) => {
                   className="relative group cursor-pointer bg-gray-100 overflow-hidden flex items-center justify-center border border-gray-200"
                   onClick={() => downloadGif(gifUrl, filename)}
                   style={{
-                    aspectRatio: '4/3', // Always enforce 4:3 for preview
-                    minHeight: '200px',
-                    maxHeight: '340px',
+                    aspectRatio: '4/3',
+                    minHeight: '260px', // Increased from 200px
+                    maxHeight: '440px', // Increased from 340px
                     background: '#f8fafc',
                   }}
                 >
