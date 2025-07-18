@@ -122,6 +122,63 @@ class ApiService {
       throw error;
     }
   }
+
+  // AUTH: Sign Up
+  async signup({ name, email, password }) {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Signup failed')
+      }
+      return await response.json()
+    } catch (error) {
+      console.error('❌ Signup error:', error)
+      throw error
+    }
+  }
+
+  // AUTH: Login
+  async login({ email, password }) {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Login failed')
+      }
+      return await response.json()
+    } catch (error) {
+      console.error('❌ Login error:', error)
+      throw error
+    }
+  }
+
+  // AUTH: Forgot Password
+  async forgotPassword(email) {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to send reset email')
+      }
+      return await response.json()
+    } catch (error) {
+      console.error('❌ Forgot password error:', error)
+      throw error
+    }
+  }
 }
 
 export default new ApiService();

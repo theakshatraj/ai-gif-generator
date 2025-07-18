@@ -74,6 +74,29 @@ export const forgotPassword = async (req, res) => {
   }
 }
 
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ message: 'Token and new password are required.' });
+    }
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired token.' });
+    }
+    user.password = await bcrypt.hash(password, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+    res.json({ message: 'Password has been reset successfully.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to reset password', error: err.message });
+  }
+};
+
 export const googleAuth = async (req, res) => {
   // This will be implemented after Google OAuth setup
   res.status(501).json({ message: 'Google OAuth not implemented yet.' })
