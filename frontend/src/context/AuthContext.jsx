@@ -35,11 +35,15 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
-  const logout = () => {
+  const logout = (navigate) => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Redirect to dashboard after logout
+    if (navigate) {
+      navigate('/');
+    }
   };
 
   const forgotPassword = async (email) => {

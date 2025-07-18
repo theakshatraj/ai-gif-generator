@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const navLinks = [
@@ -10,14 +10,23 @@ const navLinks = [
 const Header = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  // Check if we're on the generate page
+  const isOnGeneratePage = location.pathname === '/generate';
 
   const handleStartCreating = (e) => {
     if (!user) {
       e.preventDefault();
       navigate('/signup');
     }
+  };
+
+  const handleLogout = () => {
+    logout(navigate);
+    setShowLogoutConfirm(false);
   };
 
   useEffect(() => {
@@ -49,20 +58,22 @@ const Header = () => {
           </span>
         </a>
         <div className="flex-1" />
-        {/* Nav */}
-        <nav className="hidden md:flex items-center gap-6 mr-4">
-          {navLinks.map((link, index) => (
-            <a
-              key={link.name}
-              href={link.href}
-              className="text-gray-700 font-medium hover:text-indigo-600 transition-all duration-300 relative group animate-on-scroll opacity-0 translate-y-2 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-500"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              {link.name}
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
-            </a>
-          ))}
-        </nav>
+        {/* Nav - Hide completely on generate page */}
+        {!isOnGeneratePage && (
+          <nav className="hidden md:flex items-center gap-6 mr-4">
+            {navLinks.map((link, index) => (
+              <a
+                key={link.name}
+                href={link.href}
+                className="text-gray-700 font-medium hover:text-indigo-600 transition-all duration-300 relative group animate-on-scroll opacity-0 translate-y-2 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-500"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                {link.name}
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
+              </a>
+            ))}
+          </nav>
+        )}
         {/* Auth & CTA Buttons */}
         <div className="flex items-center gap-2">
           {!user ? (
@@ -87,19 +98,22 @@ const Header = () => {
               </button>
             </>
           )}
-          <Link
-            to="/generate"
-            onClick={handleStartCreating}
-            className="group px-5 py-2 rounded-full font-semibold text-white bg-gradient-to-tr from-indigo-500 to-blue-500 shadow-md hover:from-indigo-600 hover:to-blue-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-base transform hover:scale-105 hover:shadow-lg animate-on-scroll opacity-0 translate-y-2 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-500 animate-in:delay-300 relative overflow-hidden"
-          >
-            <span className="relative z-10 flex items-center gap-2">
-              <svg className="h-4 w-4 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M13 2L3 14h7v8l8-12h-7z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Start Creating
-            </span>
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
-          </Link>
+          {/* Only show Start Creating button if not on generate page */}
+          {!isOnGeneratePage && (
+            <Link
+              to="/generate"
+              onClick={handleStartCreating}
+              className="group px-5 py-2 rounded-full font-semibold text-white bg-gradient-to-tr from-indigo-500 to-blue-500 shadow-md hover:from-indigo-600 hover:to-blue-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-base transform hover:scale-105 hover:shadow-lg animate-on-scroll opacity-0 translate-y-2 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-500 animate-in:delay-300 relative overflow-hidden"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                <svg className="h-4 w-4 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M13 2L3 14h7v8l8-12h-7z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Start Creating
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+            </Link>
+          )}
         </div>
       </div>
       {/* Logout Confirmation Popup */}
@@ -122,7 +136,7 @@ const Header = () => {
               </button>
               <button
                 className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-all duration-200 transform hover:scale-105"
-                onClick={() => { logout(); setShowLogoutConfirm(false); }}
+                onClick={handleLogout}
               >
                 Logout
               </button>
