@@ -2,6 +2,7 @@ import express from "express"
 import multer from "multer"
 import path from "path"
 import { fileURLToPath } from "url"
+import authRoutes from './authRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -93,5 +94,7 @@ router.get("/youtube-metadata", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+router.use('/auth', authRoutes);
 
 export default router

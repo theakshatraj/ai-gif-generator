@@ -4,6 +4,10 @@ import dotenv from "dotenv"
 import path from "path"
 import { fileURLToPath } from "url"
 import fs from "fs-extra"
+import session from 'express-session';
+import passport from 'passport';
+const mongoose = require('mongoose');
+require('./services/passport');
 
 // Load environment variables FIRST
 dotenv.config()
@@ -25,6 +29,14 @@ if (process.env.OPENROUTER_API_KEY) {
 
 const app = express()
 const PORT = process.env.PORT || 5000
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('MongoDB connected'))
+.catch((err) => console.error('MongoDB connection error:', err));
 
 // Ensure required directories exist
 const requiredDirs = ["uploads", "output", "temp", "cache", "assets", "assets/fonts"]
@@ -53,6 +65,13 @@ app.use(
 
 app.use(express.json({ limit: "50mb" }))
 app.use(express.urlencoded({ extended: true, limit: "50mb" }))
+app.use(session({
+  secret: process.env.JWT_SECRET || 'secret',
+  resave: false,
+  saveUninitialized: false,
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Serve static files
 app.use("/output", express.static(path.join(__dirname, "../output")))
