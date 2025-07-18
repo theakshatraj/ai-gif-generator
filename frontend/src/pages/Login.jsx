@@ -40,8 +40,9 @@ const Login = () => {
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
-        <div className="flex justify-between mt-4 text-sm">
-          <Link to="/forgot-password" className="text-blue-600 hover:underline">Forgot password?</Link>
+        <div className="flex flex-col items-center mt-4 text-sm">
+          <Link to="/forgot-password" className="text-blue-600 hover:underline mb-1">Forgot password?</Link>
+          <span>New user? <Link to="/signup" className="text-blue-600 hover:underline">Create an account here</Link></span>
         </div>
       </form>
     </div>

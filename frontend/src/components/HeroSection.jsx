@@ -9,7 +9,7 @@ const HeroSection = () => {
   const handleStartCreating = (e) => {
     if (!user) {
       e.preventDefault();
-      navigate('/login');
+      navigate('/signup');
     }
   };
 

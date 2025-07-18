@@ -45,8 +45,9 @@ const Signup = () => {
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition" disabled={loading}>
           {loading ? 'Signing up...' : 'Sign Up'}
         </button>
-        <div className="flex justify-between mt-4 text-sm">
-          <Link to="/login" className="text-blue-600 hover:underline">Already have an account?</Link>
+        <div className="flex flex-col items-center mt-4 text-sm">
+          <span className="mb-1">Already have an account?</span>
+          <Link to="/login" className="text-blue-600 hover:underline">Sign in here</Link>
         </div>
       </form>
     </div>
