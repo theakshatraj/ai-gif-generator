@@ -17,7 +17,7 @@ const Signup = () => {
     setLoading(true);
     try {
       await signup({ name, email, password });
-      navigate('/');
+      navigate('/generate');
     } catch (err) {
       setError(err.message);
     } finally {

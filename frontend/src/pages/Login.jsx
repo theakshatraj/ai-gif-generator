@@ -16,7 +16,7 @@ const Login = () => {
     setLoading(true);
     try {
       await login({ email, password });
-      navigate('/');
+      navigate('/generate');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -41,7 +41,6 @@ const Login = () => {
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
         <div className="flex justify-between mt-4 text-sm">
-          <Link to="/signup" className="text-blue-600 hover:underline">Create account</Link>
           <Link to="/forgot-password" className="text-blue-600 hover:underline">Forgot password?</Link>
         </div>
       </form>

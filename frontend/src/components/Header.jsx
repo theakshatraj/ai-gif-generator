@@ -56,12 +56,6 @@ const Header = () => {
               >
                 Sign In
               </Link>
-              <Link
-                to="/signup"
-                className="px-4 py-2 rounded-lg font-semibold text-indigo-600 bg-white border border-indigo-100 hover:bg-indigo-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-200 text-base"
-              >
-                Sign Up
-              </Link>
             </>
           ) : (
             <>
