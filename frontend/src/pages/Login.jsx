@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignInButton from '../components/GoogleSignInButton';
@@ -14,7 +14,7 @@ const EyeIcon = ({ open }) => (
 );
 
 const Login = () => {
-  const { login, signup, setUser, setToken } = useAuth ? useAuth() : {};
+  const { login, setUser, setToken } = useAuth ? useAuth() : {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +23,18 @@ const Login = () => {
   const navigate = useNavigate();
 
   const emailValid = emailRegex.test(email);
+
+  useEffect(() => {
+    // Add entrance animation
+    document.body.style.overflow = 'hidden';
+    const timer = setTimeout(() => {
+      document.body.style.overflow = 'auto';
+    }, 1000);
+    return () => {
+      clearTimeout(timer);
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -60,61 +72,149 @@ const Login = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 text-center">Sign In</h2>
-        {error && <div className="mb-4 text-red-500">{error}</div>}
-        <div className="mb-4">
-          <label className="block mb-1">Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className={`w-full px-3 py-2 border rounded ${(email && !emailValid) || (error && !emailValid) ? 'border-red-500' : ''}`}
-          />
-          {(!emailValid && email) && <div className="text-red-500 text-xs mt-1">Please enter a valid email address.</div>}
+    <div className="min-h-screen bg-gradient-to-br from-[#faf7ff] via-[#f5f8ff] to-[#f0f4ff] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated background particles */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-20 left-10 w-2 h-2 bg-purple-300 rounded-full animate-pulse opacity-60 particle"></div>
+        <div className="absolute top-40 right-20 w-1 h-1 bg-blue-300 rounded-full animate-pulse opacity-40 particle"></div>
+        <div className="absolute bottom-40 left-20 w-1.5 h-1.5 bg-indigo-300 rounded-full animate-pulse opacity-50 particle"></div>
+        <div className="absolute bottom-20 right-10 w-1 h-1 bg-purple-300 rounded-full animate-pulse opacity-30 particle"></div>
+        <div className="absolute top-1/2 left-1/3 w-1 h-1 bg-blue-300 rounded-full animate-pulse opacity-40 particle"></div>
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Header */}
+        <div className="text-center mb-8 animate-on-scroll opacity-0 translate-y-8 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-1000">
+          <Link to="/" className="inline-flex items-center gap-2 mb-6 group">
+            <span className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-500 to-blue-500 group-hover:scale-105 transition-transform shadow-lg hover:shadow-xl">
+              <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2" className="h-7 w-7 group-hover:rotate-12 transition-transform duration-300">
+                <path d="M13 2L3 14h7v8l8-12h-7z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-200">
+            Welcome back
+          </h1>
+          <p className="text-gray-600 animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-400">
+            Sign in to your GifCraft AI account
+          </p>
         </div>
-        <div className="mb-6">
-          <label className="block mb-1">Password</label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded pr-10"
-            />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
-              onClick={() => setShowPassword(sp => !sp)}
-              tabIndex={-1}
+
+        {/* Form Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 animate-on-scroll opacity-0 translate-y-8 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-1000 animate-in:delay-300 relative overflow-hidden group">
+          {/* Shimmer effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+          
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2 animate-bounce-in">
+              <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+            <div className="animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-500">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 transform hover:scale-[1.02] ${
+                  (email && !emailValid) || (error && !emailValid) 
+                    ? 'border-red-300 focus:border-red-400' 
+                    : 'border-gray-200 focus:border-indigo-400'
+                }`}
+                placeholder="Enter your email"
+              />
+              {(!emailValid && email) && (
+                <div className="mt-2 text-sm text-red-600 flex items-center gap-1 animate-slide-down">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Please enter a valid email address
+                </div>
+              )}
+            </div>
+
+            <div className="animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-600">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all duration-300 pr-12 transform hover:scale-[1.02]"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors duration-200 transform hover:scale-110"
+                  onClick={() => setShowPassword(sp => !sp)}
+                  tabIndex={-1}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-indigo-500 to-blue-500 text-white py-3 rounded-xl font-semibold hover:from-indigo-600 hover:to-blue-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 hover:shadow-xl animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-700 relative overflow-hidden group" 
+              disabled={loading}
             >
-              <EyeIcon open={showPassword} />
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Signing in...
+                  </>
+                ) : (
+                  'Sign in'
+                )}
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
             </button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative my-6 animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-800">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500 font-medium">Or continue with</span>
+            </div>
+          </div>
+
+          {/* Google Sign In */}
+          <div className="animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-900">
+            <GoogleSignInButton onAuthSuccess={handleGoogleSuccess} onAuthError={handleGoogleError} />
+          </div>
+
+          {/* Links */}
+          <div className="mt-6 text-center space-y-3 animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-1000">
+            <Link 
+              to="/forgot-password" 
+              className="block text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200 transform hover:scale-105"
+            >
+              Forgot your password?
+            </Link>
+            <div className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link to="/signup" className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors duration-200 transform hover:scale-105">
+                Sign up for free
+              </Link>
+            </div>
           </div>
         </div>
-        <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
-        </button>
-        
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with</span>
-          </div>
-        </div>
-        
-        <GoogleSignInButton onAuthSuccess={handleGoogleSuccess} onAuthError={handleGoogleError} />
-        
-        <div className="flex flex-col items-center mt-4 text-sm">
-          <Link to="/forgot-password" className="text-blue-600 hover:underline mb-1">Forgot password?</Link>
-          <span>New user? <Link to="/signup" className="text-blue-600 hover:underline">Create an account here</Link></span>
-        </div>
-      </form>
+      </div>
     </div>
   );
 };

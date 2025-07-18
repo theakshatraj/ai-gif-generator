@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 const features = [
   {
@@ -45,22 +45,81 @@ const features = [
   },
 ];
 
-const FeaturesSection = () => (
-  <section className="w-full bg-white py-20 border-b border-gray-100">
-    <div className="max-w-6xl mx-auto px-4">
-      <h2 className="text-4xl md:text-5xl font-extrabold text-center mb-4 bg-gradient-to-tr from-indigo-500 to-blue-500 bg-clip-text text-transparent">Powerful Features</h2>
-      <p className="text-lg text-gray-600 text-center mb-12">Everything you need to create engaging GIFs from any video content</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-        {features.map((f, i) => (
-          <div key={i} className="bg-white rounded-2xl shadow-xl p-8 flex flex-col items-center border border-gray-100 hover:shadow-2xl transition-all duration-200">
-            <div className="mb-4">{f.icon}</div>
-            <div className="font-bold text-xl text-gray-900 mb-2 text-center">{f.title}</div>
-            <div className="text-gray-500 text-base text-center">{f.desc}</div>
-          </div>
-        ))}
+const FeaturesSection = () => {
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('animate-in');
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    const animatedElements = sectionRef.current?.querySelectorAll('.animate-on-scroll');
+    animatedElements?.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section ref={sectionRef} className="w-full bg-white py-20 border-b border-gray-100 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-20 left-10 w-32 h-32 bg-purple-100 rounded-full opacity-20 animate-float"></div>
+        <div className="absolute bottom-20 right-10 w-24 h-24 bg-blue-100 rounded-full opacity-20 animate-float" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/4 w-16 h-16 bg-indigo-100 rounded-full opacity-30 animate-float" style={{ animationDelay: '1s' }}></div>
       </div>
-    </div>
-  </section>
-);
+
+      <div className="max-w-6xl mx-auto px-4 relative z-10">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl md:text-5xl font-extrabold mb-4 bg-gradient-to-tr from-indigo-500 to-blue-500 bg-clip-text text-transparent animate-on-scroll opacity-0 translate-y-8 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-1000">
+            Powerful Features
+          </h2>
+          <p className="text-lg text-gray-600 animate-on-scroll opacity-0 translate-y-4 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 animate-in:delay-200">
+            Everything you need to create engaging GIFs from any video content
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((f, i) => (
+            <div 
+              key={i} 
+              className="group bg-white rounded-2xl shadow-xl p-8 flex flex-col items-center border border-gray-100 hover:shadow-2xl transition-all duration-500 transform hover:scale-105 hover:-translate-y-2 animate-on-scroll opacity-0 translate-y-8 animate-in:opacity-100 animate-in:translate-y-0 animate-in:duration-700 relative overflow-hidden"
+              style={{ animationDelay: `${i * 100}ms` }}
+            >
+              {/* Hover background effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-blue-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              
+              {/* Icon container with animation */}
+              <div className="relative z-10 mb-6 p-4 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 group-hover:from-purple-200 group-hover:to-blue-200 transition-all duration-500 transform group-hover:scale-110 group-hover:rotate-6">
+                <div className="transform group-hover:scale-110 transition-transform duration-500">
+                  {f.icon}
+                </div>
+              </div>
+              
+              {/* Content */}
+              <div className="relative z-10 text-center">
+                <div className="font-bold text-xl text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors duration-300">
+                  {f.title}
+                </div>
+                <div className="text-gray-500 text-base leading-relaxed">
+                  {f.desc}
+                </div>
+              </div>
+              
+              {/* Shimmer effect on hover */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
 
 export default FeaturesSection; 
