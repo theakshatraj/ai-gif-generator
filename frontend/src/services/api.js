@@ -122,55 +122,6 @@ class ApiService {
       throw error;
     }
   }
-
-  // AUTH: Sign Up
-  async signup(email, password) {
-    const response = await fetch(`${this.baseURL}/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!response.ok) throw new Error((await response.json()).message || 'Signup failed');
-    return response.json();
-  }
-
-  // AUTH: Login
-  async login(email, password) {
-    const response = await fetch(`${this.baseURL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!response.ok) throw new Error((await response.json()).message || 'Login failed');
-    return response.json();
-  }
-
-  // AUTH: Forgot Password
-  async forgotPassword(email) {
-    const response = await fetch(`${this.baseURL}/auth/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    if (!response.ok) throw new Error((await response.json()).message || 'Forgot password failed');
-    return response.json();
-  }
-
-  // AUTH: Reset Password
-  async resetPassword(token, password) {
-    const response = await fetch(`${this.baseURL}/auth/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, password }),
-    });
-    if (!response.ok) throw new Error((await response.json()).message || 'Reset password failed');
-    return response.json();
-  }
-
-  // AUTH: Get Google OAuth URL
-  getGoogleOAuthUrl() {
-    return `${this.baseURL}/auth/google`;
-  }
 }
 
 export default new ApiService();
