@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 const emailRegex = /^[\w-.]+@([\w-]+\.)+[\w-]{2,}$/i;
 
@@ -13,7 +14,7 @@ const EyeIcon = ({ open }) => (
 );
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, signup, setUser, setToken } = useAuth ? useAuth() : {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,6 +44,19 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = (token, user) => {
+    if (setToken && setUser) {
+      setToken(token);
+      setUser(user);
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+    navigate('/generate');
+  };
+  const handleGoogleError = (err) => {
+    setError(err.message || 'Google sign-in failed');
   };
 
   return (
@@ -89,6 +103,7 @@ const Login = () => {
           <span>New user? <Link to="/signup" className="text-blue-600 hover:underline">Create an account here</Link></span>
         </div>
       </form>
+      <GoogleSignInButton onAuthSuccess={handleGoogleSuccess} onAuthError={handleGoogleError} />
     </div>
   );
 };

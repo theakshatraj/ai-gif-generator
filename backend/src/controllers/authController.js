@@ -2,9 +2,13 @@ import User from '../models/User.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import nodemailer from 'nodemailer'
+import { OAuth2Client } from 'google-auth-library';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'GOOGLE_CLIENT_ID_PLACEHOLDER';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 export const signup = async (req, res) => {
   try {
@@ -99,6 +103,36 @@ export const resetPassword = async (req, res) => {
 };
 
 export const googleAuth = async (req, res) => {
-  // This will be implemented after Google OAuth setup
-  res.status(501).json({ message: 'Google OAuth not implemented yet.' })
-} 
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ message: 'Missing Google credential.' });
+    }
+    // Verify Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: 'Invalid Google token.' });
+    }
+    // Find or create user
+    let user = await User.findOne({ email: payload.email });
+    if (!user) {
+      user = await User.create({
+        name: payload.name || payload.email.split('@')[0],
+        email: payload.email,
+        googleId: payload.sub,
+      });
+    } else if (!user.googleId) {
+      user.googleId = payload.sub;
+      await user.save();
+    }
+    // Issue JWT
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+  } catch (err) {
+    res.status(500).json({ message: 'Google authentication failed', error: err.message });
+  }
+}; 

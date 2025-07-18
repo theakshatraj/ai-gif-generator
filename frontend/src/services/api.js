@@ -179,6 +179,25 @@ class ApiService {
       throw error
     }
   }
+
+  // AUTH: Google OAuth
+  async googleAuth(credential) {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential })
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Google authentication failed');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Google OAuth error:', error);
+      throw error;
+    }
+  }
 }
 
 export default new ApiService();
