@@ -98,12 +98,23 @@ const Login = () => {
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
+        
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">Or continue with</span>
+          </div>
+        </div>
+        
+        <GoogleSignInButton onAuthSuccess={handleGoogleSuccess} onAuthError={handleGoogleError} />
+        
         <div className="flex flex-col items-center mt-4 text-sm">
           <Link to="/forgot-password" className="text-blue-600 hover:underline mb-1">Forgot password?</Link>
           <span>New user? <Link to="/signup" className="text-blue-600 hover:underline">Create an account here</Link></span>
         </div>
       </form>
-      <GoogleSignInButton onAuthSuccess={handleGoogleSuccess} onAuthError={handleGoogleError} />
     </div>
   );
 };
