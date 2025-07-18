@@ -7,6 +7,7 @@ import LoadingSpinner from "./LoadingSpinner";
 import apiService from "../services/api";
 import videoTrimmer from "../utils/videoTrimmer";
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const steps = [
   { label: "Upload", icon: (
@@ -38,6 +39,7 @@ const GeneratorPage = () => {
   const { user, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const checkServer = async () => {
@@ -240,7 +242,7 @@ const GeneratorPage = () => {
               </button>
               <button
                 className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-semibold"
-                onClick={() => { logout(); setShowLogoutConfirm(false); }}
+                onClick={() => { logout(); setShowLogoutConfirm(false); navigate('/'); }}
               >
                 Logout
               </button>
