@@ -21,6 +21,7 @@
     "fs-extra": "^11.2.0",
     "googleapis": "^152.0.0",
     "https-proxy-agent": "^7.0.2",
+    "mongoose": "^8.16.4",
     "multer": "^2.0.0",
     "node-fetch": "^3.3.2",
     "openai": "^4.63.0",
@@ -41,7 +42,14 @@
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
   },
-  "keywords": ["ai", "gif", "generator", "youtube", "ffmpeg", "video-processing"],
+  "keywords": [
+    "ai",
+    "gif",
+    "generator",
+    "youtube",
+    "ffmpeg",
+    "video-processing"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "repository": {
