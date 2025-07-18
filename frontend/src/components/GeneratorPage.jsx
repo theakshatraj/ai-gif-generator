@@ -6,6 +6,7 @@ import GifPreview from "./GifPreview";
 import LoadingSpinner from "./LoadingSpinner";
 import apiService from "../services/api";
 import videoTrimmer from "../utils/videoTrimmer";
+import { useAuth } from '../context/AuthContext';
 
 const steps = [
   { label: "Upload", icon: (
@@ -34,6 +35,9 @@ const GeneratorPage = () => {
   const [selectedSegment, setSelectedSegment] = useState(null);
   const [processingSegment, setProcessingSegment] = useState(false);
   const [youtubeSegment, setYoutubeSegment] = useState(null);
+  const { user, logout } = useAuth();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const checkServer = async () => {
@@ -193,6 +197,57 @@ const GeneratorPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex flex-col items-center justify-center py-8 px-2">
+      {/* User Info Dropdown */}
+      <div className="w-full flex justify-end mb-4">
+        {user && (
+          <div className="relative">
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-indigo-100 rounded-lg shadow hover:bg-indigo-50 focus:outline-none"
+              onClick={() => setShowDropdown((prev) => !prev)}
+            >
+              <span className="font-semibold text-indigo-700">{user.name}</span>
+              <svg className={`w-4 h-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {showDropdown && (
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-indigo-100 rounded-lg shadow-lg z-50 animate-fade-in">
+                <div className="px-4 py-3 border-b border-indigo-50">
+                  <div className="font-bold text-indigo-700">{user.name}</div>
+                  <div className="text-sm text-gray-600">{user.email}</div>
+                </div>
+                <button
+                  className="w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 border-t border-indigo-50 rounded-b-lg"
+                  onClick={() => { setShowDropdown(false); setShowLogoutConfirm(true); }}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {/* Logout Confirmation Popup */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
+          <div className="bg-white rounded-xl shadow-lg p-8 max-w-sm w-full text-center">
+            <h3 className="text-lg font-bold mb-4">Confirm Logout</h3>
+            <p className="mb-6">Are you sure you want to log out?</p>
+            <div className="flex justify-center gap-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-semibold"
+                onClick={() => { logout(); setShowLogoutConfirm(false); }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-white border border-blue-200 shadow-lg rounded-xl px-6 py-3 text-blue-700 font-semibold animate-bounce-in">

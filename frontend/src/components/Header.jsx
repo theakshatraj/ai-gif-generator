@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -10,6 +10,7 @@ const navLinks = [
 const Header = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const handleStartCreating = (e) => {
     if (!user) {
@@ -61,7 +62,7 @@ const Header = () => {
             <>
               <span className="px-3 py-2 text-gray-700 font-medium">Hi, {user.name}</span>
               <button
-                onClick={logout}
+                onClick={() => setShowLogoutConfirm(true)}
                 className="px-4 py-2 rounded-lg font-semibold text-red-600 bg-white border border-red-100 hover:bg-red-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-200 text-base"
               >
                 Logout
@@ -77,6 +78,29 @@ const Header = () => {
           </Link>
         </div>
       </div>
+      {/* Logout Confirmation Popup */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
+          <div className="bg-white rounded-xl shadow-lg p-8 max-w-sm w-full text-center">
+            <h3 className="text-lg font-bold mb-4">Confirm Logout</h3>
+            <p className="mb-6">Are you sure you want to log out?</p>
+            <div className="flex justify-center gap-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-semibold"
+                onClick={() => { logout(); setShowLogoutConfirm(false); }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
