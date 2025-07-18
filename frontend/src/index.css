@@ -142,6 +142,72 @@ body {
   transform: translateY(0);
 }
 
+/* Animation utilities for immediate use */
+.animate-in {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+.animate-in\:opacity-100 {
+  opacity: 1 !important;
+}
+
+.animate-in\:translate-y-0 {
+  transform: translateY(0) !important;
+}
+
+.animate-in\:duration-500 {
+  transition-duration: 500ms !important;
+}
+
+.animate-in\:duration-700 {
+  transition-duration: 700ms !important;
+}
+
+.animate-in\:duration-1000 {
+  transition-duration: 1000ms !important;
+}
+
+.animate-in\:delay-100 {
+  transition-delay: 100ms !important;
+}
+
+.animate-in\:delay-200 {
+  transition-delay: 200ms !important;
+}
+
+.animate-in\:delay-300 {
+  transition-delay: 300ms !important;
+}
+
+.animate-in\:delay-400 {
+  transition-delay: 400ms !important;
+}
+
+.animate-in\:delay-500 {
+  transition-delay: 500ms !important;
+}
+
+.animate-in\:delay-600 {
+  transition-delay: 600ms !important;
+}
+
+.animate-in\:delay-700 {
+  transition-delay: 700ms !important;
+}
+
+.animate-in\:delay-800 {
+  transition-delay: 800ms !important;
+}
+
+.animate-in\:delay-900 {
+  transition-delay: 900ms !important;
+}
+
+.animate-in\:delay-1000 {
+  transition-delay: 1000ms !important;
+}
+
 /* Staggered animations */
 .animate-stagger-1 { animation-delay: 0.1s; }
 .animate-stagger-2 { animation-delay: 0.2s; }
