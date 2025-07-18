@@ -24,8 +24,8 @@ const ResetPassword = () => {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to reset password');
       }
-      setSuccess('Password reset successful! You can now log in.');
-      setTimeout(() => navigate('/login'), 2000);
+      const data = await response.json();
+      setSuccess(data.message || 'Password has been reset successfully. You can now close this window.');
     } catch (err) {
       setError(err.message);
     } finally {

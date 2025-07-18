@@ -48,6 +48,7 @@ export const forgotPassword = async (req, res) => {
     const { email } = req.body
     const user = await User.findOne({ email })
     if (!user) {
+      // Do not send email if user is not registered
       return res.status(404).json({ message: 'User not found.' })
     }
     const token = Math.random().toString(36).substring(2) + Date.now()
@@ -91,7 +92,7 @@ export const resetPassword = async (req, res) => {
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
-    res.json({ message: 'Password has been reset successfully.' });
+    res.json({ message: 'Password has been reset successfully. You can now close this window.' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to reset password', error: err.message });
   }
