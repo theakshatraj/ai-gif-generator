@@ -4,6 +4,7 @@ import dotenv from "dotenv"
 import path from "path"
 import { fileURLToPath } from "url"
 import fs from "fs-extra"
+import mongoose from "mongoose"
 
 // Load environment variables FIRST
 dotenv.config()
@@ -25,6 +26,23 @@ if (process.env.OPENROUTER_API_KEY) {
 
 const app = express()
 const PORT = process.env.PORT || 5000
+
+// Connect to MongoDB
+const mongoUri = process.env.MONGODB_URI
+if (!mongoUri) {
+  console.error("❌ MONGODB_URI not set in environment variables!")
+  process.exit(1)
+}
+
+mongoose.connect(mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err)
+    process.exit(1)
+  })
 
 // Ensure required directories exist
 const requiredDirs = ["uploads", "output", "temp", "cache", "assets", "assets/fonts"]
